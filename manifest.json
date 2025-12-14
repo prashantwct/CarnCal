@@ -1,0 +1,20 @@
+{
+  "name": "CarnCal",
+  "short_name": "CarnCal",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f4f6f8",
+  "theme_color": "#1b5e20",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192.png?text=CC",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://via.placeholder.com/512.png?text=CarnCal",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
