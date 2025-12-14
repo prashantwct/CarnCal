@@ -495,7 +495,6 @@
         );
     }
 
-    // Updated IDs list to include new fields
     const ids = ['date','time','gps_n','gps_e','species','animal_id','animal_sex','animal_age','body_condition','anaesthesia_risk','reason_immob','veterinarians','weight_est','weight_act','time_dart','time_down','rev_drug','rev_route','time_rev','time_headup','time_standing','rel_notes','m_total_len','m_shoulder','m_chest','m_neck','m_head_circ','m_paw_fore','m_paw_hind','m_paw_fore_len','m_paw_hind_len','m_canine_ul','m_canine_ur','m_canine_ll','m_canine_lr','m_icd_up','m_icd_low'];
     
     function createRow(tableId, html) { const row = document.createElement('tr'); row.innerHTML=html; document.querySelector(`#${tableId} tbody`).appendChild(row); }
@@ -579,6 +578,15 @@
         html+=`</tbody></table></div>
         <div class="p-section"><div class="p-sec-title">V. Morphometry</div><div class="p-grid"><div class="p-row"><span class="p-label">Total Len:</span> <span class="p-val">${val('m_total_len')}</span></div><div class="p-row"><span class="p-label">Shoulder:</span> <span class="p-val">${val('m_shoulder')}</span></div></div><div class="p-grid"><div class="p-row"><span class="p-label">Chest:</span> <span class="p-val">${val('m_chest')}</span></div><div class="p-row"><span class="p-label">Neck:</span> <span class="p-val">${val('m_neck')}</span></div></div></div>`;
         c.innerHTML = html; window.print();
+    }
+
+    // --- SERVICE WORKER REGISTRATION (OFFLINE SUPPORT) ---
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js')
+                .then(reg => console.log('Service Worker registered'))
+                .catch(err => console.log('Service Worker failed', err));
+        });
     }
 
     // INIT
