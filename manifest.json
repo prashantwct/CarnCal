@@ -7,12 +7,27 @@
   "theme_color": "#1b5e20",
   "icons": [
     {
-      "src": "https://via.placeholder.com/192.png?text=CC",
+      "src": "icons/cc-72.png",
+      "sizes": "72x72",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/cc-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/cc-144.png",
+      "sizes": "144x144",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/cc-192.png",
       "sizes": "192x192",
       "type": "image/png"
     },
     {
-      "src": "https://via.placeholder.com/512.png?text=CarnCal",
+      "src": "icons/cc-512.png",
       "sizes": "512x512",
       "type": "image/png"
     }
