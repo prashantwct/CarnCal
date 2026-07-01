@@ -64,6 +64,23 @@
         }, 1000);
     }
 
+    // --- SAFE STORAGE READ ---
+    // Wraps localStorage + JSON.parse so a single corrupted write (bad
+    // shutdown mid-write, storage quota edge case, etc.) can't throw and
+    // break history/drug rendering entirely. Falls back gracefully and
+    // warns instead of silently losing data or crashing.
+    function safeParse(key, fallback) {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        try {
+            return JSON.parse(raw);
+        } catch (err) {
+            console.warn(`[CarnCal] Corrupted data for "${key}", using fallback.`, err);
+            alert(`Warning: saved data for "${key}" appears corrupted and couldn't be read, so it was reset to avoid crashing the app. If you have a backup file, use "Restore from Backup" in My Drugs.`);
+            return fallback;
+        }
+    }
+
     // --- DRUG REPOSITORY ---
     let drugRepo = [];
     const defaultDrugs = [
@@ -75,8 +92,8 @@
     ];
 
     function loadDrugRepo() {
-        const saved = localStorage.getItem('carnivore_drugs');
-        if(saved) drugRepo = JSON.parse(saved);
+        const saved = safeParse('carnivore_drugs', null);
+        if(saved) drugRepo = saved;
         else { drugRepo = defaultDrugs; localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo)); }
         renderRepoList();
     }
@@ -215,20 +232,22 @@
             r.querySelectorAll('input, select').forEach(i=>d.push(i.value)); 
             rec.topups.push(d.slice(0, 4)); 
         });
-        let h = JSON.parse(localStorage.getItem('carnivore_db')||"[]").filter(x=>x.id!==id); h.unshift(rec); localStorage.setItem('carnivore_db', JSON.stringify(h)); alert("Saved to History!"); renderHistory();
+        let h = safeParse('carnivore_db', []).filter(x=>x.id!==id); h.unshift(rec); localStorage.setItem('carnivore_db', JSON.stringify(h)); alert("Saved to History!"); renderHistory();
     }
     
     function renderHistory() {
-        const l = document.getElementById('historyList'); l.innerHTML=""; const h = JSON.parse(localStorage.getItem('carnivore_db')||"[]");
+        const l = document.getElementById('historyList'); l.innerHTML=""; const h = safeParse('carnivore_db', []);
         if(h.length===0) l.innerHTML="<div style='text-align:center; padding:20px; color:#aaa;'>No records</div>";
         h.forEach((r,i)=>{ const d=document.createElement('div'); d.style.cssText="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;"; d.innerHTML = `<div><strong>${r.id}</strong> <span style="font-size:0.8rem; background:#eee; padding:2px 6px; border-radius:4px;">${r.species}</span><br><small style="color:#888">${r.date}</small></div><div><button class="btn-outline" style="display:inline; width:auto; padding:5px 10px; margin-right:5px;" onclick="loadRec(${i})">Load</button><button class="btn-sm" style="color:red; border:none; background:#ffebee;" onclick="delRec(${i})">X</button></div>`; l.appendChild(d); });
     }
     
     function loadRec(i) {
-        const r = JSON.parse(localStorage.getItem('carnivore_db'))[i]; ids.forEach(k=>{ if(document.getElementById(k)) document.getElementById(k).value=r[k]||""; });
-        document.querySelector('#logTable tbody').innerHTML=""; r.logs.forEach(l=>addLogStep(l)); document.querySelector('#topupTable tbody').innerHTML=""; r.topups.forEach(l=>addTopupRow(l)); switchTab('tab-immob');
+        const r = safeParse('carnivore_db', [])[i];
+        if (!r) { alert("Record not found."); return; }
+        ids.forEach(k=>{ if(document.getElementById(k)) document.getElementById(k).value=r[k]||""; });
+        document.querySelector('#logTable tbody').innerHTML=""; (r.logs||[]).forEach(l=>addLogStep(l)); document.querySelector('#topupTable tbody').innerHTML=""; (r.topups||[]).forEach(l=>addTopupRow(l)); switchTab('tab-immob');
     }
-    function delRec(i) { if(!confirm("Delete?")) return; let h = JSON.parse(localStorage.getItem('carnivore_db')); h.splice(i,1); localStorage.setItem('carnivore_db', JSON.stringify(h)); renderHistory(); }
+    function delRec(i) { if(!confirm("Delete?")) return; let h = safeParse('carnivore_db', []); h.splice(i,1); localStorage.setItem('carnivore_db', JSON.stringify(h)); renderHistory(); }
 
     function exportCSV() {
         let c = "Field,Value\n"; ids.forEach(k=>{ const el=document.getElementById(k); if(el) c+=`${k},${el.value}\n`; });
@@ -249,7 +268,7 @@
     function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
 
     function downloadBackup() {
-        const backup = { history: JSON.parse(localStorage.getItem('carnivore_db') || "[]"), drugs: JSON.parse(localStorage.getItem('carnivore_drugs') || "[]"), date: new Date().toISOString() };
+        const backup = { history: safeParse('carnivore_db', []), drugs: safeParse('carnivore_drugs', []), date: new Date().toISOString() };
         const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "CarnCal_Backup_" + new Date().toISOString().slice(0,10) + ".json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
@@ -304,11 +323,40 @@
         c.innerHTML = html; window.print();
     }
 
+    // --- CONNECTIVITY BADGE ---
+    // Reassures field users the app is running correctly with no signal,
+    // and that a "no connection" state is expected, not a fault.
+    function updateNetStatus() {
+        const badge = document.getElementById('netStatus');
+        if (!badge) return;
+        if (navigator.onLine) {
+            badge.textContent = 'Online';
+            badge.className = 'net-badge online';
+        } else {
+            badge.textContent = 'Offline';
+            badge.className = 'net-badge offline';
+        }
+    }
+    window.addEventListener('online', updateNetStatus);
+    window.addEventListener('offline', updateNetStatus);
+    updateNetStatus();
+
     // --- SERVICE WORKER REGISTRATION (OFFLINE SUPPORT) ---
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
             navigator.serviceWorker.register('./sw.js')
-                .then(reg => console.log('Service Worker registered'))
+                .then(reg => {
+                    console.log('Service Worker registered');
+                    // If a new SW takes control (after activate/clients.claim in
+                    // an update), reload once so the user gets the fresh assets
+                    // instead of being stuck between old cached JS/HTML.
+                    let refreshed = false;
+                    navigator.serviceWorker.addEventListener('controllerchange', () => {
+                        if (refreshed) return;
+                        refreshed = true;
+                        location.reload();
+                    });
+                })
                 .catch(err => console.log('Service Worker failed', err));
         });
     }

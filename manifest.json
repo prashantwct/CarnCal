@@ -1,8 +1,12 @@
 {
+  "id": "/CarnCal/",
   "name": "CarnCal",
   "short_name": "CarnCal",
+  "description": "Offline anaesthesia monitoring & drug-dose datasheet for wild carnivore immobilization",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
+  "orientation": "portrait-primary",
   "background_color": "#f4f6f8",
   "theme_color": "#1b5e20",
   "icons": [
@@ -30,6 +34,12 @@
       "src": "icons/cc-512.png",
       "sizes": "512x512",
       "type": "image/png"
+    },
+    {
+      "src": "icons/cc-512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
