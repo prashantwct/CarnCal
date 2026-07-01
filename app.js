@@ -91,10 +91,43 @@
         {name: "Atipamezole", dose: 0.25, conc: 5}
     ];
 
+    // Emergency/resuscitation drugs, sourced from WTHP (tiger-specific field
+    // doses). Merged into any existing saved library below so current users
+    // get these without losing their custom entries. Dual-range doses use
+    // the WTHP midpoint or the safer starting dose — verify against vial
+    // strength and patient before use; these are calculator presets, not a
+    // substitute for clinical judgement.
+    const emergencyDrugs = [
+        {name: "Adrenaline 1:1000", dose: 0.01, conc: 1},
+        {name: "Atropine", dose: 0.04, conc: 0.6},
+        {name: "Glycopyrrolate", dose: 0.01, conc: 0.2},
+        {name: "Doxapram (Adult)", dose: 1.0, conc: 20},
+        {name: "Doxapram (Juvenile)", dose: 3.0, conc: 20},
+        {name: "Diazepam (Seizure)", dose: 0.1, conc: 5},
+        {name: "Dexamethasone (Shock)", dose: 1.0, conc: 2},
+        {name: "Dexamethasone (Anti-inflam)", dose: 0.1, conc: 2}
+    ];
+
+    // One-time merge: add any emergencyDrugs entries not already present
+    // (by name) into the saved library, without touching user edits/custom
+    // drugs. Runs once, guarded by a flag, so it won't re-add a drug the
+    // user deliberately deleted afterward.
+    function mergeEmergencyDrugs() {
+        if (localStorage.getItem('carnivore_drugs_emergency_merged_v1')) return;
+        const existingNames = new Set(drugRepo.map(d => d.name));
+        let added = false;
+        emergencyDrugs.forEach(d => {
+            if (!existingNames.has(d.name)) { drugRepo.push(d); added = true; }
+        });
+        if (added) localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        localStorage.setItem('carnivore_drugs_emergency_merged_v1', '1');
+    }
+
     function loadDrugRepo() {
         const saved = safeParse('carnivore_drugs', null);
         if(saved) drugRepo = saved;
         else { drugRepo = defaultDrugs; localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo)); }
+        mergeEmergencyDrugs();
         renderRepoList();
     }
 
