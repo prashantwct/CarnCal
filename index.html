@@ -320,6 +320,25 @@
                 </label>
             </div>
         </div>
+
+        <div class="card" style="border-left-color: var(--green, #1b5e20);">
+            <div class="sec-head">Cloud Sync (Team Sharing)</div>
+            <p style="font-size:0.8rem; color:#666;">
+                Cases you save always stay on this device first — that never changes. If you sign in and have
+                network, they also sync to your team's shared database in the background, so other vets on the
+                team can see them too. No sign-in needed to keep using the app fully offline.
+            </p>
+            <div id="syncStatus" style="font-size:0.8rem; font-weight:700; margin:8px 0; padding:6px 10px; border-radius:6px; background:#f1f3f5;">Checking sync status…</div>
+            <div id="syncSignedOut">
+                <div class="form-group"><label>Team email</label><input type="email" id="sync_email" placeholder="you@team.org"></div>
+                <div class="form-group"><label>Password</label><input type="password" id="sync_password" placeholder="••••••••"></div>
+                <button class="btn btn-primary" onclick="CarnCalSync && CarnCalSync.signIn()">Sign In</button>
+                <p style="font-size:0.72rem; color:#999; margin-top:6px;">Accounts are created by your admin in the Firebase console — there's no self sign-up, to keep case data (including GPS) restricted to the team.</p>
+            </div>
+            <div id="syncSignedIn" style="display:none;">
+                <button class="btn btn-outline" onclick="CarnCalSync && CarnCalSync.signOutUser()">Sign Out</button>
+            </div>
+        </div>
     </div>
 
     <div id="tab-ref" class="tab-content">
@@ -347,6 +366,54 @@
                 <tr><td>Flumazenil / Sarmazenil</td><td>1 mg per 20–25 mg benzodiazepine, IM</td><td>Shortens Zoletil recovery in tigers (tiletamine clears faster than zolazepam). Short half-life — resedation risk.</td></tr>
             </table>
         </div>
+        <div class="card">
+            <div class="sec-head">Antibiotics</div>
+            <p style="font-size:0.8rem;">Src: <a class="ref-link" href="https://wildtigerhealthproject.org/resources-category/anti-bacterial-drugs/" target="_blank">WTHP</a> — Anti-bacterial drugs. Long-acting formulations preferred for field release cases; refrigerate stock.</p>
+            <table>
+                <tr><th>Drug</th><th>Dose</th><th>Notes</th></tr>
+                <tr><td>Amoxicillin</td><td>15 mg/kg PO/IM/SC q12h</td><td>Bactericidal</td></tr>
+                <tr><td>Amoxicillin (long-acting)</td><td>15 mg/kg IM q3days</td><td>150 mg/ml — 1 ml per 10 kg</td></tr>
+                <tr><td>Amoxicillin/Clavulanic acid</td><td>12.5–25 mg/kg PO/IM/IV/SC q12h</td><td>First-line antibiotic of choice</td></tr>
+                <tr><td>Cefovecin (Convenia)</td><td>4 mg/kg SC/IM q2wks, or 8 mg/kg once</td><td>Long-acting (14+ days). Good for field cases. Max 3 doses at 4mg/kg, 14 days apart</td></tr>
+                <tr><td>Cephalexin</td><td>12.5–25 mg/kg PO q12h</td><td>Doses &lt;35 mg/kg q8h also reported</td></tr>
+                <tr><td>Doxycycline</td><td>10 mg/kg PO q24h</td><td>Drug of choice for haemobartonellosis/chlamydophilosis (4wk course)</td></tr>
+                <tr><td>Enrofloxacin</td><td>5 mg/kg PO/IM/SC q24h</td><td>Broad spectrum; no reported retinal toxicity in tigers</td></tr>
+                <tr><td>Marbofloxacin</td><td>2 mg/kg PO/IM/SC q24h</td><td>Broad spectrum</td></tr>
+                <tr><td>Metronidazole</td><td>7.5–10 mg/kg PO q12h (or 15–20 mg/kg q24h)</td><td>Anaerobic infections</td></tr>
+                <tr><td>Oxytetracycline LA (300mg/ml)</td><td>20 mg/kg deep IM q72h, or 30 mg/kg q5days</td><td>Deep IM only</td></tr>
+                <tr><td>Trimethoprim-sulfamethoxazole</td><td>30 mg/kg PO q12h</td><td>—</td></tr>
+            </table>
+        </div>
+        <div class="card">
+            <div class="sec-head">Analgesics &amp; Anti-inflammatories</div>
+            <p style="font-size:0.8rem;">Src: Ramsay, "Use of Analgesics in Exotic Felids" (Univ. of Tennessee) — includes tiger-specific case reports (Hart 2000 abdominal surgery; Ball 2001 osteoarthritis; Conrad 2002 onychectomy). WTHP's own anti-inflammatory table has no published doses yet, so this section leans on exotic-felid literature rather than tiger-only data — treat to effect, not by rote dose.</p>
+            <table>
+                <tr><th>Drug</th><th>Dose</th><th>Use</th></tr>
+                <tr><td>Meloxicam</td><td>0.2–0.3 mg/kg SC (peri-op); then 0.1–0.2 mg/kg PO/SC taper over days</td><td>NSAID — best-studied option long-term in exotic felids</td></tr>
+                <tr><td>Carprofen</td><td>4 mg/kg IV/IM/SC (peri-op); 2.0–2.2 mg/kg q12h x 2 days</td><td>NSAID — avoid extended use (leopard GI ulcer death reported after 2wks)</td></tr>
+                <tr><td>Ketoprofen</td><td>2 mg/kg SC (peri-op); 1 mg/kg PO q24h</td><td>NSAID — reduces platelet activity, avoid pre-surgery</td></tr>
+                <tr><td>Aspirin</td><td>10 mg/kg PO q72h</td><td>Only NSAID with an established safe chronic dose in felids; used for tiger/lion osteoarthritis</td></tr>
+                <tr><td>Buprenorphine</td><td>0.01–0.02 mg/kg SC/IM/PO q6–8h</td><td>Opioid, tiger post-abdominal-surgery dose reported: 0.015 mg/kg then 0.005 mg/kg q8h</td></tr>
+                <tr><td>Butorphanol</td><td>0.1–0.4 mg/kg SC; adult tiger/lion total dose 4–5mg SC</td><td>Opioid, short-acting (&lt;2h) — visceral analgesia only, poor for body wall pain</td></tr>
+                <tr><td>Tramadol</td><td>1–4 mg/kg PO q12h; adult lion/tiger total dose 50–100mg PO q12h</td><td>Non-opioid, safe with NSAIDs, effective long-term in tigers/lions</td></tr>
+            </table>
+        </div>
+        <div class="card">
+            <div class="sec-head">Anti-parasitics</div>
+            <p style="font-size:0.8rem;">Src: <a class="ref-link" href="https://wildtigerhealthproject.org/resources-category/anti-parasite-drugs-parasiticides/" target="_blank">WTHP</a> — Anti-parasite drugs. Single-injection options preferred for same-day field release.</p>
+            <table>
+                <tr><th>Parasite</th><th>Drug</th><th>Dose</th></tr>
+                <tr><td>Roundworms</td><td>Albendazole</td><td>7.5 mg/kg PO, single dose</td></tr>
+                <tr><td>Roundworms</td><td>Ivermectin</td><td>0.2 mg/kg SC/IM/PO, single dose</td></tr>
+                <tr><td>Roundworms</td><td>Fenbendazole</td><td>20 mg/kg PO q24h x 5 days</td></tr>
+                <tr><td>Tapeworms</td><td>Praziquantel</td><td>5 mg/kg SC/PO, single dose</td></tr>
+                <tr><td>Flukes</td><td>Praziquantel</td><td>5 mg/kg PO/SC (suppresses shedding, unlikely to clear adults)</td></tr>
+                <tr><td>Giardia</td><td>Fenbendazole</td><td>50 mg/kg PO q24h x 5 days</td></tr>
+                <tr><td>Coccidia</td><td>Sulphadimethoxine</td><td>50 mg/kg PO</td></tr>
+                <tr><td>Ecto (fleas/mites/ticks)</td><td>Ivermectin</td><td>0.2 mg/kg SC/IM/PO — neurotoxic, environmental persistence</td></tr>
+                <tr><td>Ecto (fleas/mites/ticks)</td><td>Fluralaner</td><td>25 mg/kg PO q3 months</td></tr>
+            </table>
+        </div>
     </div>
 
 
@@ -365,5 +432,6 @@
 <div id="print-container"></div>
 
 <script src="./app.js"></script>
+<script type="module" src="./sync.js"></script>
 </body>
 </html>

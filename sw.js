@@ -1,10 +1,12 @@
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = 'carncal-' + CACHE_VERSION;
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './app.js',
+  './sync.js',
+  './firebase-config.js',
   './icons/cc-72.png',
   './icons/cc-96.png',
   './icons/cc-144.png',

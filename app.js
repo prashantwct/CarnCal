@@ -123,11 +123,41 @@
         localStorage.setItem('carnivore_drugs_emergency_merged_v1', '1');
     }
 
+    // Curated antibiotics / analgesics / anti-parasitics for the calculator,
+    // sourced in the Reference tab. Only single-dose or clearly injectable
+    // items with a commonly-stocked concentration are included here — oral
+    // multi-day regimens (tramadol, aspirin, most anti-parasitics) are
+    // reference-only since "volume to inject" isn't the relevant number for
+    // those. Concentrations reflect common formulation strengths — always
+    // confirm against the actual vial label before dosing.
+    const formularyDrugs = [
+        {name: "Amoxicillin LA", dose: 15, conc: 150},
+        {name: "Cefovecin (Convenia)", dose: 8, conc: 80},
+        {name: "Enrofloxacin", dose: 5, conc: 100},
+        {name: "Meloxicam (peri-op)", dose: 0.2, conc: 5},
+        {name: "Carprofen (peri-op)", dose: 4, conc: 50},
+        {name: "Buprenorphine", dose: 0.02, conc: 0.3},
+        {name: "Butorphanol", dose: 0.4, conc: 10},
+        {name: "Ivermectin", dose: 0.2, conc: 10}
+    ];
+
+    function mergeFormularyDrugs() {
+        if (localStorage.getItem('carnivore_drugs_formulary_merged_v1')) return;
+        const existingNames = new Set(drugRepo.map(d => d.name));
+        let added = false;
+        formularyDrugs.forEach(d => {
+            if (!existingNames.has(d.name)) { drugRepo.push(d); added = true; }
+        });
+        if (added) localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        localStorage.setItem('carnivore_drugs_formulary_merged_v1', '1');
+    }
+
     function loadDrugRepo() {
         const saved = safeParse('carnivore_drugs', null);
         if(saved) drugRepo = saved;
         else { drugRepo = defaultDrugs; localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo)); }
         mergeEmergencyDrugs();
+        mergeFormularyDrugs();
         renderRepoList();
     }
 
@@ -266,6 +296,10 @@
             rec.topups.push(d.slice(0, 4)); 
         });
         let h = safeParse('carnivore_db', []).filter(x=>x.id!==id); h.unshift(rec); localStorage.setItem('carnivore_db', JSON.stringify(h)); alert("Saved to History!"); renderHistory();
+        // Cloud Sync (optional, never blocks the local save above). See
+        // sync.js — this is a no-op until Cloud Sync is configured and
+        // the user is signed in.
+        try { if (window.CarnCalSync && window.CarnCalSync.saveCase) window.CarnCalSync.saveCase(rec); } catch (e) { console.warn('[CarnCal Sync] skipped:', e); }
     }
     
     function renderHistory() {

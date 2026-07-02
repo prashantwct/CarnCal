@@ -1,0 +1,30 @@
+rules_version = '2';
+
+// Security model for CarnCal Cloud Sync.
+//
+// Case records include GPS coordinates of tiger immobilizations — this is
+// sensitive, anti-poaching-relevant data. Default-deny everything, then
+// allow read/write on "cases" ONLY to signed-in users whose UID has been
+// explicitly added to the "team_members" collection. There is no
+// self-registration in the app — you add each vet's UID yourself in the
+// Firebase console after creating their account (see FIREBASE_SETUP.md,
+// step 5). The team_members collection itself is not readable or
+// writable by clients at all — it's managed only from the console.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /team_members/{uid} {
+      allow read, write: if false;
+    }
+
+    match /cases/{caseId} {
+      allow read, write: if request.auth != null &&
+        exists(/databases/$(database)/documents/team_members/$(request.auth.uid));
+    }
+
+    // Default deny for anything not explicitly matched above.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
