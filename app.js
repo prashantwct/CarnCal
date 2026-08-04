@@ -1,15 +1,76 @@
 // app.js
 
+    // --- CONFIG ---
+    const APP_VERSION = '1.1.0';
+    const CONFIG = {
+        STORAGE_WARN_MB: 4.0,
+        ANAESTHESIA_WARNING_MIN: 35,
+        GPS_TIMEOUT_MS: 10000
+    };
+
+    // --- SAFE STORAGE WRITE ---
+    // Wraps localStorage.setItem so a full quota (common on old field
+    // devices with years of history) throws a visible warning instead of
+    // silently killing the save with no feedback to the vet in the field.
+    function safeSetItem(key, value) {
+        try {
+            localStorage.setItem(key, value);
+            return true;
+        } catch (err) {
+            console.error(`[CarnCal] Failed to save "${key}"`, err);
+            alert('Storage is full or unavailable, so this could not be saved. Please download a backup (My Drugs → Download Full Backup) and free up space, e.g. by removing old records.');
+            return false;
+        }
+    }
+
+    // --- XSS-SAFE TEXT INSERTION ---
+    // All user-entered strings (drug names, animal IDs, notes, restored
+    // backup content) go through this before landing in innerHTML.
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // --- CSV-SAFE FIELD ESCAPING ---
+    // Quotes any field containing a comma, quote, or newline and doubles
+    // internal quotes, per RFC 4180, so free-text notes with commas don't
+    // silently corrupt the exported columns.
+    function csvEscape(v) {
+        const s = (v === null || v === undefined) ? '' : String(v);
+        if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+        return s;
+    }
+
     // --- APP LOGIC ---
     function switchTab(t){
         document.querySelectorAll('.tab, .tab-content').forEach(e=>e.classList.remove('active'));
         document.getElementById(t).classList.add('active');
-        const map={'tab-calc':0,'tab-immob':1,'tab-morph':2,'tab-settings':3,'tab-ref':4,'tab-hist':5};
+        const map={'tab-case':0,'tab-calc':1,'tab-monitor':2,'tab-morph':3,'tab-ref':4,'tab-settings':5,'tab-hist':6};
         document.querySelectorAll('.tab')[map[t]].classList.add('active');
         window.scrollTo(0,0);
     }
     function toggleHelp(id) { document.getElementById(id).classList.toggle('active'); }
     function autoSave() { const s = document.getElementById('saveStatus'); s.style.display='block'; setTimeout(()=>s.style.display='none', 2000); }
+
+    // --- HEADER WEIGHT BADGE ---
+    // The Calculator weight now lives on its own tab, away from Case/
+    // Monitoring — this keeps the current value visible everywhere via
+    // the sticky header instead of requiring a tab switch to check it.
+    function updateWeightBadge() {
+        const w = parseFloat(document.getElementById('calc_weight').value);
+        const badge = document.getElementById('weightBadge');
+        if (isFinite(w) && w > 0) {
+            document.getElementById('weightBadgeVal').textContent = w;
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
 
     // --- FUNCTIONAL IMPROVEMENT: AUTO-TRANSFER WEIGHT ---
     function updateCalcWeight() {
@@ -18,6 +79,7 @@
         if (actualWeight > 0) {
             calcWeight.value = actualWeight;
             recalcAll();
+            updateWeightBadge();
         }
     }
 
@@ -59,7 +121,7 @@
             handSec.style.transform = `translateX(-50%) rotate(${degSec}deg)`;
             handMin.style.transform = `translateX(-50%) rotate(${degMin}deg)`;
 
-            if(minutes >= 35) widget.classList.add('warning');
+            if(minutes >= CONFIG.ANAESTHESIA_WARNING_MIN) widget.classList.add('warning');
             else widget.classList.remove('warning');
         }, 1000);
     }
@@ -83,12 +145,13 @@
 
     // --- DRUG REPOSITORY ---
     let drugRepo = [];
+    const DRUG_CATEGORIES = ['Anaesthetic', 'Emergency', 'Antibiotic', 'Analgesic', 'Anti-parasitic', 'Custom'];
     const defaultDrugs = [
-        {name: "Ketamine", dose: 4.0, conc: 100},
-        {name: "Xylazine", dose: 1.0, conc: 100},
-        {name: "Medetomidine", dose: 0.05, conc: 1}, 
-        {name: "Tiletamine-Zol", dose: 2.0, conc: 100},
-        {name: "Atipamezole", dose: 0.25, conc: 5}
+        {name: "Ketamine", dose: 4.0, conc: 100, category: "Anaesthetic"},
+        {name: "Xylazine", dose: 1.0, conc: 100, category: "Anaesthetic"},
+        {name: "Medetomidine", dose: 0.05, conc: 1, category: "Anaesthetic"},
+        {name: "Tiletamine-Zol", dose: 2.0, conc: 100, category: "Anaesthetic"},
+        {name: "Atipamezole", dose: 0.25, conc: 5, category: "Anaesthetic"}
     ];
 
     // Emergency/resuscitation drugs, sourced from WTHP (tiger-specific field
@@ -98,14 +161,14 @@
     // strength and patient before use; these are calculator presets, not a
     // substitute for clinical judgement.
     const emergencyDrugs = [
-        {name: "Adrenaline 1:1000", dose: 0.01, conc: 1},
-        {name: "Atropine", dose: 0.04, conc: 0.6},
-        {name: "Glycopyrrolate", dose: 0.01, conc: 0.2},
-        {name: "Doxapram (Adult)", dose: 1.0, conc: 20},
-        {name: "Doxapram (Juvenile)", dose: 3.0, conc: 20},
-        {name: "Diazepam (Seizure)", dose: 0.1, conc: 5},
-        {name: "Dexamethasone (Shock)", dose: 1.0, conc: 2},
-        {name: "Dexamethasone (Anti-inflam)", dose: 0.1, conc: 2}
+        {name: "Adrenaline 1:1000", dose: 0.01, conc: 1, category: "Emergency"},
+        {name: "Atropine", dose: 0.04, conc: 0.6, category: "Emergency"},
+        {name: "Glycopyrrolate", dose: 0.01, conc: 0.2, category: "Emergency"},
+        {name: "Doxapram (Adult)", dose: 1.0, conc: 20, category: "Emergency"},
+        {name: "Doxapram (Juvenile)", dose: 3.0, conc: 20, category: "Emergency"},
+        {name: "Diazepam (Seizure)", dose: 0.1, conc: 5, category: "Emergency"},
+        {name: "Dexamethasone (Shock)", dose: 1.0, conc: 2, category: "Emergency"},
+        {name: "Dexamethasone (Anti-inflam)", dose: 0.1, conc: 2, category: "Emergency"}
     ];
 
     // One-time merge: add any emergencyDrugs entries not already present
@@ -119,7 +182,7 @@
         emergencyDrugs.forEach(d => {
             if (!existingNames.has(d.name)) { drugRepo.push(d); added = true; }
         });
-        if (added) localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        if (added) safeSetItem('carnivore_drugs', JSON.stringify(drugRepo));
         localStorage.setItem('carnivore_drugs_emergency_merged_v1', '1');
     }
 
@@ -131,14 +194,14 @@
     // those. Concentrations reflect common formulation strengths — always
     // confirm against the actual vial label before dosing.
     const formularyDrugs = [
-        {name: "Amoxicillin LA", dose: 15, conc: 150},
-        {name: "Cefovecin (Convenia)", dose: 8, conc: 80},
-        {name: "Enrofloxacin", dose: 5, conc: 100},
-        {name: "Meloxicam (peri-op)", dose: 0.2, conc: 5},
-        {name: "Carprofen (peri-op)", dose: 4, conc: 50},
-        {name: "Buprenorphine", dose: 0.02, conc: 0.3},
-        {name: "Butorphanol", dose: 0.4, conc: 10},
-        {name: "Ivermectin", dose: 0.2, conc: 10}
+        {name: "Amoxicillin LA", dose: 15, conc: 150, category: "Antibiotic"},
+        {name: "Cefovecin (Convenia)", dose: 8, conc: 80, category: "Antibiotic"},
+        {name: "Enrofloxacin", dose: 5, conc: 100, category: "Antibiotic"},
+        {name: "Meloxicam (peri-op)", dose: 0.2, conc: 5, category: "Analgesic"},
+        {name: "Carprofen (peri-op)", dose: 4, conc: 50, category: "Analgesic"},
+        {name: "Buprenorphine", dose: 0.02, conc: 0.3, category: "Analgesic"},
+        {name: "Butorphanol", dose: 0.4, conc: 10, category: "Analgesic"},
+        {name: "Ivermectin", dose: 0.2, conc: 10, category: "Anti-parasitic"}
     ];
 
     function mergeFormularyDrugs() {
@@ -148,36 +211,98 @@
         formularyDrugs.forEach(d => {
             if (!existingNames.has(d.name)) { drugRepo.push(d); added = true; }
         });
-        if (added) localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        if (added) safeSetItem('carnivore_drugs', JSON.stringify(drugRepo));
         localStorage.setItem('carnivore_drugs_formulary_merged_v1', '1');
+    }
+
+    // One-time migration: libraries saved before categories existed get a
+    // best-effort category assigned by matching name against the known
+    // lists above; anything unrecognized (the vet's own custom entries)
+    // becomes "Custom" rather than being left ungrouped.
+    function migrateDrugCategories() {
+        if (localStorage.getItem('carnivore_drugs_categories_migrated_v1')) return;
+        const known = {};
+        [...defaultDrugs, ...emergencyDrugs, ...formularyDrugs].forEach(d => { known[d.name] = d.category; });
+        let changed = false;
+        drugRepo.forEach(d => {
+            if (!d.category) { d.category = known[d.name] || 'Custom'; changed = true; }
+        });
+        if (changed) safeSetItem('carnivore_drugs', JSON.stringify(drugRepo));
+        localStorage.setItem('carnivore_drugs_categories_migrated_v1', '1');
     }
 
     function loadDrugRepo() {
         const saved = safeParse('carnivore_drugs', null);
         if(saved) drugRepo = saved;
-        else { drugRepo = defaultDrugs; localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo)); }
+        else { drugRepo = defaultDrugs; safeSetItem('carnivore_drugs', JSON.stringify(drugRepo)); }
         mergeEmergencyDrugs();
         mergeFormularyDrugs();
+        migrateDrugCategories();
         renderRepoList();
     }
 
     function saveDrugToRepo() {
-        const n = document.getElementById('new_drug_name').value;
+        const n = document.getElementById('new_drug_name').value.trim();
         const d = parseFloat(document.getElementById('new_drug_dose').value);
         const c = parseFloat(document.getElementById('new_drug_conc').value);
-        if(!n || !d || !c) { alert("Fill all fields"); return; }
-        drugRepo.push({name:n, dose:d, conc:c});
-        localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        const cat = document.getElementById('new_drug_category').value || 'Custom';
+        if(!n || !isFinite(d) || d<=0 || !isFinite(c) || c<=0) { alert("Enter a drug name and a dose and concentration greater than 0."); return; }
+        const prevRepo = drugRepo.slice();
+        drugRepo.push({name:n, dose:d, conc:c, category:cat});
+        if (!safeSetItem('carnivore_drugs', JSON.stringify(drugRepo))) { drugRepo = prevRepo; return; }
         renderRepoList();
-        alert("Drug Added");
         document.getElementById('new_drug_name').value='';
+        document.getElementById('new_drug_dose').value='';
+        document.getElementById('new_drug_conc').value='';
+        document.getElementById('new_drug_category').value='Custom';
+        alert("Drug Added");
     }
 
     function deleteDrugFromRepo(i) {
         if(!confirm("Remove from Library?")) return;
+        const prevRepo = drugRepo.slice();
         drugRepo.splice(i, 1);
-        localStorage.setItem('carnivore_drugs', JSON.stringify(drugRepo));
+        if (!safeSetItem('carnivore_drugs', JSON.stringify(drugRepo))) { drugRepo = prevRepo; return; }
+        if (editingDrugIndex === i) editingDrugIndex = -1;
         renderRepoList();
+    }
+
+    // --- EDIT IN PLACE ---
+    // Only one row editable at a time; index into drugRepo (stable while
+    // editing since we don't reorder/remove rows mid-edit).
+    let editingDrugIndex = -1;
+
+    function startEditDrug(i) {
+        editingDrugIndex = i;
+        renderRepoList();
+    }
+
+    function cancelEditDrug() {
+        editingDrugIndex = -1;
+        renderRepoList();
+    }
+
+    function saveEditDrug(i) {
+        const row = document.querySelector(`#repoList tr[data-idx="${i}"]`);
+        if (!row) return;
+        const n = row.querySelector('.edit-name').value.trim();
+        const d = parseFloat(row.querySelector('.edit-dose').value);
+        const c = parseFloat(row.querySelector('.edit-conc').value);
+        const cat = row.querySelector('.edit-category').value || 'Custom';
+        if(!n || !isFinite(d) || d<=0 || !isFinite(c) || c<=0) { alert("Enter a drug name and a dose and concentration greater than 0."); return; }
+        const prevRepo = drugRepo.slice();
+        drugRepo[i] = { name: n, dose: d, conc: c, category: cat };
+        if (!safeSetItem('carnivore_drugs', JSON.stringify(drugRepo))) { drugRepo = prevRepo; return; }
+        editingDrugIndex = -1;
+        renderRepoList();
+    }
+
+    // --- SEARCH / FILTER ---
+    let drugFilterQuery = '';
+    function filterDrugRepo(q) { drugFilterQuery = (q || '').trim().toLowerCase(); renderRepoList(); }
+
+    function categoryOptionsHtml(selected) {
+        return DRUG_CATEGORIES.map(c => `<option value="${c}" ${c===selected?'selected':''}>${c}</option>`).join('');
     }
 
     function renderRepoList() {
@@ -185,21 +310,60 @@
         div.innerHTML = "";
         if(drugRepo.length === 0) { div.innerHTML = "No custom drugs."; return; }
         const tbl = document.createElement('table');
-        tbl.innerHTML = `<thead><tr><th>Name</th><th>Dose</th><th>Conc</th><th></th></tr></thead><tbody></tbody>`;
+        tbl.innerHTML = `<thead><tr><th>Name</th><th>mg/kg</th><th>mg/ml</th><th></th></tr></thead><tbody></tbody>`;
+        const tbody = tbl.querySelector('tbody');
+        let shown = 0;
         drugRepo.forEach((d, i) => {
+            const cat = d.category || 'Custom';
+            if (drugFilterQuery && editingDrugIndex !== i &&
+                !d.name.toLowerCase().includes(drugFilterQuery) &&
+                !cat.toLowerCase().includes(drugFilterQuery)) return;
+            shown++;
             const tr = document.createElement('tr');
-            tr.innerHTML = `<td>${d.name}</td><td>${d.dose}</td><td>${d.conc}</td><td><button class="btn-sm" style="color:red;border:none;" onclick="deleteDrugFromRepo(${i})">X</button></td>`;
-            tbl.querySelector('tbody').appendChild(tr);
+            tr.setAttribute('data-idx', i);
+            if (editingDrugIndex === i) {
+                tr.innerHTML = `<td><input type="text" class="log-input edit-name" value="${escapeHtml(d.name)}" style="text-align:left; margin-bottom:4px;">` +
+                    `<select class="log-input edit-category" style="font-size:0.75rem;">${categoryOptionsHtml(cat)}</select></td>` +
+                    `<td><input type="number" step="any" class="log-input edit-dose" value="${escapeHtml(d.dose)}"></td>` +
+                    `<td><input type="number" step="any" class="log-input edit-conc" value="${escapeHtml(d.conc)}"></td>` +
+                    `<td style="white-space:nowrap;">` +
+                    `<button class="btn-sm" aria-label="Save changes to ${escapeHtml(d.name)}" style="color:var(--primary);border:none;" onclick="saveEditDrug(${i})">✓</button>` +
+                    `<button class="btn-sm" aria-label="Cancel editing" style="color:#888;border:none;" onclick="cancelEditDrug()">✕</button>` +
+                    `</td>`;
+            } else {
+                tr.innerHTML = `<td>${escapeHtml(d.name)}<br><span class="cat-chip">${escapeHtml(cat)}</span></td><td>${escapeHtml(d.dose)}</td><td>${escapeHtml(d.conc)}</td>` +
+                    `<td style="white-space:nowrap;">` +
+                    `<button class="btn-sm" aria-label="Edit ${escapeHtml(d.name)}" style="color:var(--blue);border:none;" onclick="startEditDrug(${i})">✎</button>` +
+                    `<button class="btn-sm" aria-label="Remove ${escapeHtml(d.name)} from library" style="color:red;border:none;" onclick="deleteDrugFromRepo(${i})">X</button>` +
+                    `</td>`;
+            }
+            tbody.appendChild(tr);
         });
+        if (shown === 0) { div.innerHTML = "No drugs match your search."; return; }
         div.appendChild(tbl);
     }
 
     // --- CALCULATOR ---
     function addDrugRow(name="", dose="", conc="") {
         const id = 'r'+Date.now();
+        const opts = buildDrugOptionsHtml();
+        createRow('calcTable', `<td id="${id}"><select class="log-input" style="text-align:left; font-weight:bold; color:var(--primary);" onchange="fillDrugRow(this)">${opts}</select><input type="text" class="log-input calc-name-custom" placeholder="Or type custom" value="${escapeHtml(name)}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="c-dose log-input" value="${escapeHtml(dose)}" oninput="recalcAll()"></td><td><input type="number" class="c-conc log-input" value="${escapeHtml(conc)}" oninput="recalcAll()"></td><td class="c-vol" style="font-weight:bold; color:var(--primary); text-align:center;">0.0</td><td onclick="document.getElementById('${id}').parentElement.remove(); recalcAll();" style="color:red; font-weight:bold; cursor:pointer;">X</td>`);
+    }
+
+    // Groups the drug picker by category (Anaesthetic/Emergency/Antibiotic/
+    // Analgesic/Anti-parasitic/Custom) via <optgroup> so the list stays fast
+    // to scan under time pressure as the library grows. Option values stay
+    // as the original drugRepo index regardless of grouping.
+    function buildDrugOptionsHtml() {
         let opts = `<option value="">Select Drug...</option>`;
-        drugRepo.forEach((d, i) => { opts += `<option value="${i}">${d.name}</option>`; });
-        createRow('calcTable', `<td id="${id}"><select class="log-input" style="text-align:left; font-weight:bold; color:var(--primary);" onchange="fillDrugRow(this)">${opts}</select><input type="text" class="log-input calc-name-custom" placeholder="Or type custom" value="${name}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="c-dose log-input" value="${dose}" oninput="recalcAll()"></td><td><input type="number" class="c-conc log-input" value="${conc}" oninput="recalcAll()"></td><td class="c-vol" style="font-weight:bold; color:var(--primary); text-align:center;">0.0</td><td onclick="document.getElementById('${id}').parentElement.remove(); recalcAll();" style="color:red; font-weight:bold; cursor:pointer;">X</td>`);
+        DRUG_CATEGORIES.forEach(cat => {
+            const inCat = drugRepo.map((d, i) => ({d, i})).filter(x => (x.d.category || 'Custom') === cat);
+            if (inCat.length === 0) return;
+            opts += `<optgroup label="${escapeHtml(cat)}">`;
+            inCat.forEach(x => { opts += `<option value="${x.i}">${escapeHtml(x.d.name)}</option>`; });
+            opts += `</optgroup>`;
+        });
+        return opts;
     }
 
     function fillDrugRow(selectEl) {
@@ -254,12 +418,17 @@
         s.innerText="Locating..."; t.innerText="Acquiring...";
         navigator.geolocation.getCurrentPosition(
             p => {
-                document.getElementById('gps_n').value = p.coords.latitude.toFixed(6);
-                document.getElementById('gps_e').value = p.coords.longitude.toFixed(6);
+                const lat = p.coords.latitude, lon = p.coords.longitude;
+                if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+                    s.innerText = "GPS returned an invalid fix. Try again."; t.innerText = "Retry GPS"; s.style.color = "red";
+                    return;
+                }
+                document.getElementById('gps_n').value = lat.toFixed(6);
+                document.getElementById('gps_e').value = lon.toFixed(6);
                 s.innerText = `Accuracy: ${p.coords.accuracy.toFixed(1)}m`; t.innerText="Update GPS"; s.style.color="green"; autoSave();
             }, 
             e => { s.innerText="GPS Failed."; t.innerText="Retry GPS"; s.style.color="red"; },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 } // Added options
+            { enableHighAccuracy: true, timeout: CONFIG.GPS_TIMEOUT_MS, maximumAge: 0 }
         );
     }
 
@@ -270,19 +439,23 @@
     // --- FUNCTIONAL IMPROVEMENT: LOG DELETION ---
     function addLogStep(v=null) { 
         const t = v?v[0]:new Date().toTimeString().substr(0,5); 
-        createRow('logTable', `<td><input type="time" class="log-input" value="${t}"></td><td><input type="number" class="log-input" value="${v?v[1]:''}"></td><td><input type="number" class="log-input" value="${v?v[2]:''}"></td><td><input type="number" class="log-input" value="${v?v[3]:''}"></td><td><input type="text" class="log-input" value="${v?v[4]:''}"></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;">X</td>`); 
+        createRow('logTable', `<td><input type="time" class="log-input" value="${escapeHtml(t)}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[1]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[2]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[3]:'')}"></td><td><input type="text" class="log-input" value="${escapeHtml(v?v[4]:'')}"></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this reading">X</td>`); 
     }
     
     // --- FUNCTIONAL IMPROVEMENT: TOPUP DELETION ---
     function addTopupRow(v=null) { 
         const t = v?v[0]:new Date().toTimeString().substr(0,5); 
         const sel = v?v[3]:'IV'; 
-        createRow('topupTable', `<td><input type="time" class="log-input" value="${t}"></td><td><input type="text" class="log-input" placeholder="Drug" value="${v?v[1]:''}"></td><td><input type="number" class="log-input" placeholder="mg" value="${v?v[2]:''}"></td><td><select class="log-input"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;">X</td>`); 
+        createRow('topupTable', `<td><input type="time" class="log-input" value="${escapeHtml(t)}"></td><td><input type="text" class="log-input" placeholder="Drug" value="${escapeHtml(v?v[1]:'')}"></td><td><input type="number" class="log-input" placeholder="mg" value="${escapeHtml(v?v[2]:'')}"></td><td><select class="log-input"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this dose">X</td>`); 
     }
 
+    // Records are keyed by a unique recordId, never by animal ID — an
+    // animal can be legitimately recaptured/re-immobilized many times
+    // (health checks, collar swaps, translocations) and each event is a
+    // distinct case that must not overwrite the last one.
     function saveToHistory() {
         const id = document.getElementById('animal_id').value || "Unknown";
-        let rec = {id:id, date: document.getElementById('date').value, species: document.getElementById('species').value, logs:[], topups:[]};
+        let rec = {recordId: 'rec_' + Date.now() + '_' + Math.random().toString(36).slice(2,8), id:id, date: document.getElementById('date').value, species: document.getElementById('species').value, logs:[], topups:[]};
         ids.forEach(k=>{ if(document.getElementById(k)) rec[k] = document.getElementById(k).value; });
         // Logs and Topups are saved with only the original 5/4 data fields, excluding the 'X' column.
         document.querySelectorAll('#logTable tbody tr').forEach(r=>{ 
@@ -295,49 +468,87 @@
             r.querySelectorAll('input, select').forEach(i=>d.push(i.value)); 
             rec.topups.push(d.slice(0, 4)); 
         });
-        let h = safeParse('carnivore_db', []).filter(x=>x.id!==id); h.unshift(rec); localStorage.setItem('carnivore_db', JSON.stringify(h)); alert("Saved to History!"); renderHistory();
+        let h = safeParse('carnivore_db', []);
+        // Only offer to overwrite when it's the exact same in-progress case
+        // (same animal ID + same date) that was already saved this session —
+        // never for an older case just because the ID matches.
+        const dupIdx = h.findIndex(x => x.id === id && x.date === rec.date);
+        if (dupIdx !== -1) {
+            if (!confirm(`A record for "${id}" on ${rec.date} already exists. Overwrite it? (Cancel keeps both as separate records.)`)) {
+                h.unshift(rec);
+            } else {
+                h[dupIdx] = rec;
+            }
+        } else {
+            h.unshift(rec);
+        }
+        if (!safeSetItem('carnivore_db', JSON.stringify(h))) return;
+        alert("Saved to History!"); renderHistory();
         // Cloud Sync (optional, never blocks the local save above). See
         // sync.js — this is a no-op until Cloud Sync is configured and
         // the user is signed in.
         try { if (window.CarnCalSync && window.CarnCalSync.saveCase) window.CarnCalSync.saveCase(rec); } catch (e) { console.warn('[CarnCal Sync] skipped:', e); }
     }
     
+    // --- SEARCH / FILTER ---
+    let histFilterQuery = '';
+    function filterHistory(q) { histFilterQuery = (q || '').trim().toLowerCase(); renderHistory(); }
+
     function renderHistory() {
         const l = document.getElementById('historyList'); l.innerHTML=""; const h = safeParse('carnivore_db', []);
-        if(h.length===0) l.innerHTML="<div style='text-align:center; padding:20px; color:#aaa;'>No records</div>";
-        h.forEach((r,i)=>{ const d=document.createElement('div'); d.style.cssText="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;"; d.innerHTML = `<div><strong>${r.id}</strong> <span style="font-size:0.8rem; background:#eee; padding:2px 6px; border-radius:4px;">${r.species}</span><br><small style="color:#888">${r.date}</small></div><div><button class="btn-outline" style="display:inline; width:auto; padding:5px 10px; margin-right:5px;" onclick="loadRec(${i})">Load</button><button class="btn-sm" style="color:red; border:none; background:#ffebee;" onclick="delRec(${i})">X</button></div>`; l.appendChild(d); });
+        if(h.length===0) { l.innerHTML="<div style='text-align:center; padding:20px; color:#aaa;'>No records</div>"; return; }
+        let shown = 0;
+        h.forEach((r,i)=>{
+            if (histFilterQuery && !(String(r.id||'').toLowerCase().includes(histFilterQuery) || String(r.species||'').toLowerCase().includes(histFilterQuery))) return;
+            shown++;
+            const d=document.createElement('div');
+            d.style.cssText="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;";
+            d.innerHTML = `<div><strong>${escapeHtml(r.id)}</strong> <span style="font-size:0.8rem; background:#eee; padding:2px 6px; border-radius:4px;">${escapeHtml(r.species)}</span><br><small style="color:#888">${escapeHtml(r.date)}</small></div><div><button class="btn-outline" aria-label="Load record for ${escapeHtml(r.id)}" style="display:inline; width:auto; padding:5px 10px; margin-right:5px;" onclick="loadRec(${i})">Load</button><button class="btn-sm" aria-label="Delete record for ${escapeHtml(r.id)}" style="color:red; border:none; background:#ffebee;" onclick="delRec(${i})">X</button></div>`;
+            l.appendChild(d);
+        });
+        if (shown === 0) l.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'>No matching records</div>";
     }
     
     function loadRec(i) {
         const r = safeParse('carnivore_db', [])[i];
         if (!r) { alert("Record not found."); return; }
         ids.forEach(k=>{ if(document.getElementById(k)) document.getElementById(k).value=r[k]||""; });
-        document.querySelector('#logTable tbody').innerHTML=""; (r.logs||[]).forEach(l=>addLogStep(l)); document.querySelector('#topupTable tbody').innerHTML=""; (r.topups||[]).forEach(l=>addTopupRow(l)); switchTab('tab-immob');
+        document.querySelector('#logTable tbody').innerHTML=""; (r.logs||[]).forEach(l=>addLogStep(l)); document.querySelector('#topupTable tbody').innerHTML=""; (r.topups||[]).forEach(l=>addTopupRow(l)); updateWeightBadge(); switchTab('tab-case');
     }
-    function delRec(i) { if(!confirm("Delete?")) return; let h = safeParse('carnivore_db', []); h.splice(i,1); localStorage.setItem('carnivore_db', JSON.stringify(h)); renderHistory(); }
+    function delRec(i) { if(!confirm("Delete?")) return; let h = safeParse('carnivore_db', []); h.splice(i,1); if (!safeSetItem('carnivore_db', JSON.stringify(h))) return; renderHistory(); }
 
     function exportCSV() {
-        let c = "Field,Value\n"; ids.forEach(k=>{ const el=document.getElementById(k); if(el) c+=`${k},${el.value}\n`; });
+        let c = "Field,Value\n"; ids.forEach(k=>{ const el=document.getElementById(k); if(el) c+=`${csvEscape(k)},${csvEscape(el.value)}\n`; });
         c+="\nMONITORING LOGS\nTime,HR,RR,SpO2,Note\n"; document.querySelectorAll('#logTable tbody tr').forEach(r=>{ 
             let l=[]; 
             r.querySelectorAll('input:not([type="time"]), input[type="time"]').forEach(i=>l.push(i.value)); 
-            c+=l.slice(0, 5).join(',')+"\n"; 
+            c+=l.slice(0, 5).map(csvEscape).join(',')+"\n"; 
         });
         c+="\nTOP-UP DOSES\nTime,Drug,mg,Route\n"; document.querySelectorAll('#topupTable tbody tr').forEach(r=>{ 
             let l=[]; 
             r.querySelectorAll('input, select').forEach(i=>l.push(i.value)); 
-            c+=l.slice(0, 4).join(',')+"\n"; 
+            c+=l.slice(0, 4).map(csvEscape).join(',')+"\n"; 
         });
         const b = new Blob([c],{type:'text/csv'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=(document.getElementById('animal_id').value||"data")+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
-    function clearForm() { if(confirm("Clear Form?")) { document.querySelectorAll('input').forEach(i=>i.value=""); document.querySelector('#logTable tbody').innerHTML=""; document.querySelector('#topupTable tbody').innerHTML=""; document.getElementById('date').valueAsDate = new Date(); addLogStep(); document.querySelector('#calcTable tbody').innerHTML=""; addDrugRow(); } }
+    function clearForm() { if(confirm("Clear Form?")) { document.querySelectorAll('input').forEach(i=>i.value=""); document.querySelector('#logTable tbody').innerHTML=""; document.querySelector('#topupTable tbody').innerHTML=""; document.getElementById('date').valueAsDate = new Date(); addLogStep(); document.querySelector('#calcTable tbody').innerHTML=""; addDrugRow(); updateWeightBadge(); } }
     
-    function val(id) { const el = document.getElementById(id); return el ? el.value : ''; }
+    function val(id) { const el = document.getElementById(id); return escapeHtml(el ? el.value : ''); }
 
     function downloadBackup() {
         const backup = { history: safeParse('carnivore_db', []), drugs: safeParse('carnivore_drugs', []), date: new Date().toISOString() };
         const blob = new Blob([JSON.stringify(backup, null, 2)], {type: 'application/json'});
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "CarnCal_Backup_" + new Date().toISOString().slice(0,10) + ".json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+
+    // Validates shape before touching storage — rejects a file that isn't
+    // actually a CarnCal backup rather than trusting arbitrary JSON.
+    function isValidBackup(data) {
+        if (!data || typeof data !== 'object') return false;
+        if (!Array.isArray(data.history) || !Array.isArray(data.drugs)) return false;
+        const recOk = data.history.every(r => r && typeof r === 'object' && typeof r.id === 'string');
+        const drugOk = data.drugs.every(d => d && typeof d.name === 'string' && isFinite(d.dose) && isFinite(d.conc));
+        return recOk && drugOk;
     }
 
     function restoreBackup(input) {
@@ -346,16 +557,41 @@
         reader.onload = function(e) {
             try {
                 const data = JSON.parse(e.target.result);
-                if (data.history && data.drugs) {
-                    if(confirm(`Restore ${data.history.length} records?`)) { localStorage.setItem('carnivore_db', JSON.stringify(data.history)); localStorage.setItem('carnivore_drugs', JSON.stringify(data.drugs)); alert("Restored!"); location.reload(); }
-                } else { alert("Invalid backup."); }
-            } catch (err) { alert("Error parsing file."); }
+                if (isValidBackup(data)) {
+                    if(confirm(`Restore ${data.history.length} records? This replaces everything currently on this device.`)) {
+                        if (!safeSetItem('carnivore_db', JSON.stringify(data.history))) return;
+                        if (!safeSetItem('carnivore_drugs', JSON.stringify(data.drugs))) return;
+                        alert("Restored!"); location.reload();
+                    }
+                } else { alert("Invalid or corrupted backup file — nothing was restored."); }
+            } catch (err) { alert("Error parsing file — nothing was restored."); }
         }; reader.readAsText(file);
+        input.value = '';
     }
 
     function checkStorageUsage() {
         let total = 0; for (let x in localStorage) { if (localStorage.hasOwnProperty(x)) total += ((localStorage[x].length * 2) / 1024 / 1024); }
-        if (total > 4.0) alert("Warning: App storage > 4MB. Download backup.");
+        if (total > CONFIG.STORAGE_WARN_MB) alert(`Warning: App storage > ${CONFIG.STORAGE_WARN_MB}MB. Download a backup and consider clearing old records.`);
+    }
+
+    // --- REFERENCE TAB SEARCH ---
+    // Filters rows across every table on the Reference tab by plain-text
+    // match, and hides a whole card if nothing in it matches — keeps the
+    // ~40-row reference list fast to scan under time pressure.
+    function filterReferenceTables(query) {
+        const q = (query || '').trim().toLowerCase();
+        document.querySelectorAll('#tab-ref .card').forEach(card => {
+            const table = card.querySelector('table');
+            if (!table) return; // the search box's own card has no table
+            const rows = Array.from(table.querySelectorAll('tr')).slice(1); // skip header row
+            let anyVisible = false;
+            rows.forEach(r => {
+                const match = !q || r.textContent.toLowerCase().includes(q);
+                r.style.display = match ? '' : 'none';
+                if (match) anyVisible = true;
+            });
+            card.style.display = (q && !anyVisible) ? 'none' : '';
+        });
     }
 
     let wakeLock = null;
@@ -375,14 +611,14 @@
         <div class="p-section"><div class="p-sec-title">III. Drugs Used</div><table class="p-table"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th></tr></thead><tbody>`;
         document.querySelectorAll('#topupTable tbody tr').forEach(r=>{ 
             let d=[]; 
-            r.querySelectorAll('input, select').forEach(i=>d.push(i.value)); 
+            r.querySelectorAll('input, select').forEach(i=>d.push(escapeHtml(i.value))); 
             if(d[1]) html+=`<tr><td>${d[0]}</td><td>${d[1]}</td><td>${d[2]}</td><td>${d[3]}</td></tr>`; 
         });
         html+=`</tbody></table></div>
         <div class="p-section"><div class="p-sec-title">IV. Monitoring Log</div><table class="p-table"><thead><tr><th>Time</th><th>HR</th><th>RR</th><th>SpO2</th><th>Notes</th></tr></thead><tbody>`;
         document.querySelectorAll('#logTable tbody tr').forEach(r=>{ 
             let d=[]; 
-            r.querySelectorAll('input:not([type="time"]), input[type="time"]').forEach(i=>d.push(i.value)); 
+            r.querySelectorAll('input:not([type="time"]), input[type="time"]').forEach(i=>d.push(escapeHtml(i.value))); 
             if(d[0]) html+=`<tr><td>${d[0]}</td><td>${d[1]}</td><td>${d[2]}</td><td>${d[3]}</td><td>${d[4]}</td></tr>`; 
         });
         html+=`</tbody></table></div>
@@ -436,3 +672,5 @@
     renderHistory();
     checkStorageUsage();
     requestWakeLock();
+    updateWeightBadge();
+    document.getElementById('appVersion').textContent = 'CarnCal v' + APP_VERSION;

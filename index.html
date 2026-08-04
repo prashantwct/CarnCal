@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="description" content="Offline-first anaesthesia monitoring and drug-dose calculator for wild carnivore immobilization records.">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://www.gstatic.com 'unsafe-inline'; connect-src 'self' https://www.gstatic.com https://*.googleapis.com https://*.firebaseio.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'self'; object-src 'none';">
     <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/cc-192.png">
+    <link rel="icon" href="icons/cc-96.png">
     <title>Anaesthesia Monitoring Sheet</title>
     <style>
         :root {
@@ -37,7 +41,8 @@
                 box-shadow: 0 2px 10px rgba(0,0,0,0.2); 
                 display: flex; justify-content: space-between; align-items: center;
             }
-            .header-title { text-align: left; }
+            .org-logo { height: 34px; width: auto; margin-right: 10px; flex-shrink: 0; border-radius: 4px; background: rgba(255,255,255,0.9); padding: 2px; }
+            .header-title { text-align: left; flex: 1; min-width: 0; }
             h1 { margin: 0; font-size: 1.1rem; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; }
             .subtitle { font-size: 0.75rem; opacity: 0.9; font-weight: 500; }
             .net-badge { display:inline-block; margin-left:6px; padding:1px 7px; border-radius:10px; font-size:0.65rem; font-weight:700; vertical-align:middle; }
@@ -93,7 +98,8 @@
             .btn-gps { background: #e8f5e9; color: var(--primary); border: 1px solid var(--primary); display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 10px; }
             .btn-outline { background: white; border: 2px solid var(--border); color: #555; }
             .btn-add { background: white; border: 2px dashed var(--primary); color: var(--primary); margin-top: 15px; }
-            .btn-sm { padding: 8px; font-size: 0.8rem; width: auto; display: inline-block; cursor: pointer; }
+            .btn-sm { padding: 8px; font-size: 0.8rem; width: auto; display: inline-block; cursor: pointer; margin: 0 2px; }
+            .cat-chip { display:inline-block; font-size:0.65rem; font-weight:700; color:#666; background:#eee; padding:1px 6px; border-radius:8px; margin-top:2px; }
             .btn-primary { background: var(--primary); color: white; }
             .btn-action { background: #00897b; color: white; margin-top: 15px; }
 
@@ -142,9 +148,10 @@
 <body>
 
 <header>
+    <img id="orgLogo" class="org-logo" src="./assets/wct-logo.png" alt="Wildlife Conservation Trust" onerror="this.style.display='none'">
     <div class="header-title">
         <h1>Anaesthesia Monitoring Sheet</h1>
-        <div class="subtitle">Offline Datasheet <span id="netStatus" class="net-badge"></span></div>
+        <div class="subtitle">Offline Datasheet <span id="netStatus" class="net-badge"></span> <span id="weightBadge" class="net-badge online" style="display:none;">⚖ <span id="weightBadgeVal">0</span> kg</span></div>
         <div id="saveStatus" style="font-size:0.7rem; margin-top:5px; opacity:0.8; display:none;">Auto-saved...</div>
     </div>
     
@@ -160,15 +167,16 @@
 
 <div class="container">
     <div class="tabs-wrapper">
-        <div class="tab active" onclick="switchTab('tab-calc')">Calculator</div>
-        <div class="tab" onclick="switchTab('tab-immob')">Capture</div>
+        <div class="tab active" onclick="switchTab('tab-case')">Case</div>
+        <div class="tab" onclick="switchTab('tab-calc')">Calculator</div>
+        <div class="tab" onclick="switchTab('tab-monitor')">Monitoring</div>
         <div class="tab" onclick="switchTab('tab-morph')">Morphometry</div>
-        <div class="tab" onclick="switchTab('tab-settings')">My Drugs</div>
         <div class="tab" onclick="switchTab('tab-ref')">Reference</div>
+        <div class="tab" onclick="switchTab('tab-settings')">My Drugs</div>
         <div class="tab" onclick="switchTab('tab-hist')">History</div>
     </div>
 
-    <div id="tab-calc" class="tab-content active">
+    <div id="tab-case" class="tab-content active">
         <div class="card">
             <div class="sec-head">Veterinarians</div>
             <div class="form-group">
@@ -176,26 +184,6 @@
             </div>
         </div>
 
-        <div class="card">
-            <div class="sec-head">Multi-Drug Calculator</div>
-            <div class="form-group"><label>Animal Weight (kg)</label><input type="number" id="calc_weight" placeholder="Enter Weight" oninput="recalcAll()" style="font-size:1.2rem; padding:15px;"></div>
-            <p style="font-size:0.8rem; color:#666;">Select from "My Drugs" or type manually.</p>
-            <table class="calc-table" id="calcTable"><thead><tr><th>Drug</th><th>mg/kg</th><th>mg/ml</th><th>Vol</th><th></th></tr></thead><tbody></tbody></table>
-            <button class="btn btn-add" onclick="addDrugRow()">+ Add Drug Row</button>
-            <div id="resultBox" style="background:var(--primary); color:white; padding:20px; border-radius:8px; text-align:center; margin-top:20px; display:none;">
-                <div style="font-size:0.8rem; opacity:0.8;">TOTAL VOLUME</div><div style="font-size:2rem; font-weight:bold;"><span id="total_vol_display">0.00</span> ml</div>
-                <button class="btn btn-outline" style="margin-top:10px; border:1px solid white; color:white; background:rgba(255,255,255,0.2);" onclick="useAsUsedDose()">📋 Use calculations as Used Dose</button>
-            </div>
-        </div>
-
-        <div class="card card-warn">
-            <div class="sec-head" style="color: var(--warn-text);">Top-Up / Used Doses</div>
-            <table id="topupTable"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th><th></th></tr></thead><tbody></tbody></table>
-            <button class="btn btn-add" style="border-color: #f57f17; color: #f57f17;" onclick="addTopupRow()">+ Add Top-Up</button>
-        </div>
-    </div>
-
-    <div id="tab-immob" class="tab-content">
         <div class="card">
             <div class="sec-head">Identity & Signalment</div>
             <div class="row">
@@ -224,7 +212,29 @@
             </div>
             <div class="form-group"><label>Reason for Immob.</label><input type="text" id="reason_immob" placeholder="e.g. Radio Collaring" oninput="autoSave()"></div>
         </div>
+    </div>
 
+    <div id="tab-calc" class="tab-content">
+        <div class="card">
+            <div class="sec-head">Multi-Drug Calculator</div>
+            <div class="form-group"><label>Animal Weight (kg)</label><input type="number" id="calc_weight" placeholder="Enter Weight" oninput="recalcAll(); updateWeightBadge();" style="font-size:1.2rem; padding:15px;"></div>
+            <p style="font-size:0.8rem; color:#666;">Select from "My Drugs" or type manually.</p>
+            <table class="calc-table" id="calcTable"><thead><tr><th>Drug</th><th>mg/kg</th><th>mg/ml</th><th>Vol</th><th></th></tr></thead><tbody></tbody></table>
+            <button class="btn btn-add" onclick="addDrugRow()">+ Add Drug Row</button>
+            <div id="resultBox" style="background:var(--primary); color:white; padding:20px; border-radius:8px; text-align:center; margin-top:20px; display:none;">
+                <div style="font-size:0.8rem; opacity:0.8;">TOTAL VOLUME</div><div style="font-size:2rem; font-weight:bold;"><span id="total_vol_display">0.00</span> ml</div>
+                <button class="btn btn-outline" style="margin-top:10px; border:1px solid white; color:white; background:rgba(255,255,255,0.2);" onclick="useAsUsedDose()">📋 Use calculations as Used Dose</button>
+            </div>
+        </div>
+
+        <div class="card card-warn">
+            <div class="sec-head" style="color: var(--warn-text);">Top-Up / Used Doses</div>
+            <table id="topupTable"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th><th></th></tr></thead><tbody></tbody></table>
+            <button class="btn btn-add" style="border-color: #f57f17; color: #f57f17;" onclick="addTopupRow()">+ Add Top-Up</button>
+        </div>
+    </div>
+
+    <div id="tab-monitor" class="tab-content">
         <div class="card">
             <div class="sec-head">Timeline</div>
             <div class="row">
@@ -261,18 +271,18 @@
     <div id="tab-morph" class="tab-content">
         <div class="card">
             <div class="sec-head">Measurements (cm)</div>
-            <div class="form-group"><label>1. Total Length <span class="help-btn" onclick="toggleHelp('help_total')">?</span></label><input type="number" id="m_total_len" oninput="autoSave()">
+            <div class="form-group"><label>1. Total Length <span class="help-btn" role="button" tabindex="0" aria-label="Show help for total length measurement" onclick="toggleHelp('help_total')" onkeydown="if(event.key==='Enter'||event.key===' '){toggleHelp('help_total')}">?</span></label><input type="number" id="m_total_len" oninput="autoSave()">
                 <div id="help_total" class="tooltip-box"><strong>Nose to Tail Tip</strong> (Over curves)<div class="diagram-container"><svg width="200" height="40" viewBox="0 0 200 40"><path d="M10,20 Q50,5 100,20 T190,20" fill="none" stroke="#2c7744" stroke-width="3"/><circle cx="10" cy="20" r="3" fill="#d63031"/><circle cx="190" cy="20" r="3" fill="#d63031"/></svg></div></div>
             </div>
             <div class="row"><div class="col"><label>2. Shoulder</label><input type="number" id="m_shoulder" oninput="autoSave()"></div><div class="col"><label>3. Chest</label><input type="number" id="m_chest" oninput="autoSave()"></div></div>
-            <div class="form-group"><label>4. Neck <span class="help-btn" onclick="toggleHelp('help_neck')">?</span></label><input type="number" id="m_neck" oninput="autoSave()">
+            <div class="form-group"><label>4. Neck <span class="help-btn" role="button" tabindex="0" aria-label="Show help for neck measurement" onclick="toggleHelp('help_neck')" onkeydown="if(event.key==='Enter'||event.key===' '){toggleHelp('help_neck')}">?</span></label><input type="number" id="m_neck" oninput="autoSave()">
                 <div id="help_neck" class="tooltip-box">Collar fitting.<div class="diagram-container"><svg width="60" height="40" viewBox="0 0 60 40"><path d="M10,10 L50,10 L45,35 L15,35 Z" fill="#eee" stroke="#999"/><ellipse cx="30" cy="22" rx="12" ry="5" fill="none" stroke="#d63031" stroke-width="2" stroke-dasharray="3"/></svg></div></div>
             </div>
-            <div class="form-group"><label>5. Head Circ <span class="help-btn" onclick="toggleHelp('help_head')">?</span></label><input type="number" id="m_head_circ" oninput="autoSave()">
+            <div class="form-group"><label>5. Head Circ <span class="help-btn" role="button" tabindex="0" aria-label="Show help for head circumference measurement" onclick="toggleHelp('help_head')" onkeydown="if(event.key==='Enter'||event.key===' '){toggleHelp('help_head')}">?</span></label><input type="number" id="m_head_circ" oninput="autoSave()">
                 <div id="help_head" class="tooltip-box">Circumference at widest point of zygomatic arches.</div>
             </div>
             
-            <label>Paw Width (cm) <span class="help-btn" onclick="toggleHelp('help_paw')">?</span></label>
+            <label>Paw Width (cm) <span class="help-btn" role="button" tabindex="0" aria-label="Show help for paw width measurement" onclick="toggleHelp('help_paw')" onkeydown="if(event.key==='Enter'||event.key===' '){toggleHelp('help_paw')}">?</span></label>
             <div class="row">
                 <div class="col"><input type="number" id="m_paw_fore" placeholder="Fore W" oninput="autoSave()"></div>
                 <div class="col"><input type="number" id="m_paw_hind" placeholder="Hind W" oninput="autoSave()"></div>
@@ -293,55 +303,10 @@
         </div>
     </div>
     
-    <div id="tab-settings" class="tab-content">
-        <div class="card">
-            <div class="sec-head">Add to Library</div>
-            <div class="form-group"><label>Drug Name</label><input type="text" id="new_drug_name" placeholder="e.g. Tiletamine"></div>
-            <div class="row">
-                <div class="col"><div class="form-group"><label>Def Dose (mg/kg)</label><input type="number" id="new_drug_dose" placeholder="0"></div></div>
-                <div class="col"><div class="form-group"><label>Def Conc (mg/ml)</label><input type="number" id="new_drug_conc" placeholder="0"></div></div>
-            </div>
-            <button class="btn btn-primary" onclick="saveDrugToRepo()">Save to Library</button>
-        </div>
-        
-        <div class="card">
-            <div class="sec-head">My Drug Library</div>
-            <div id="repoList"></div>
-        </div>
-
-        <div class="card" style="border-left-color: var(--blue);">
-            <div class="sec-head" style="color: var(--blue);">Data Backup</div>
-            <p style="font-size:0.8rem; color:#666;">Download a full backup of all history and custom drugs.</p>
-            <button class="btn btn-outline" onclick="downloadBackup()">📂 Download Full Backup</button>
-            <div style="margin-top:10px;">
-                <label class="btn btn-outline" style="border-style:dashed; display:block;">
-                    📥 Restore from Backup
-                    <input type="file" onchange="restoreBackup(this)" style="display:none;">
-                </label>
-            </div>
-        </div>
-
-        <div class="card" style="border-left-color: var(--green, #1b5e20);">
-            <div class="sec-head">Cloud Sync (Team Sharing)</div>
-            <p style="font-size:0.8rem; color:#666;">
-                Cases you save always stay on this device first — that never changes. If you sign in and have
-                network, they also sync to your team's shared database in the background, so other vets on the
-                team can see them too. No sign-in needed to keep using the app fully offline.
-            </p>
-            <div id="syncStatus" style="font-size:0.8rem; font-weight:700; margin:8px 0; padding:6px 10px; border-radius:6px; background:#f1f3f5;">Checking sync status…</div>
-            <div id="syncSignedOut">
-                <div class="form-group"><label>Team email</label><input type="email" id="sync_email" placeholder="you@team.org"></div>
-                <div class="form-group"><label>Password</label><input type="password" id="sync_password" placeholder="••••••••"></div>
-                <button class="btn btn-primary" onclick="CarnCalSync && CarnCalSync.signIn()">Sign In</button>
-                <p style="font-size:0.72rem; color:#999; margin-top:6px;">Accounts are created by your admin in the Firebase console — there's no self sign-up, to keep case data (including GPS) restricted to the team.</p>
-            </div>
-            <div id="syncSignedIn" style="display:none;">
-                <button class="btn btn-outline" onclick="CarnCalSync && CarnCalSync.signOutUser()">Sign Out</button>
-            </div>
-        </div>
-    </div>
-
     <div id="tab-ref" class="tab-content">
+        <div class="card" style="padding-bottom:15px;">
+            <input type="text" id="refFilter" placeholder="🔍 Search reference tables (e.g. atropine, seizure, ivermectin)" oninput="filterReferenceTables(this.value)" style="margin:0;">
+        </div>
         <div class="card">
             <div class="sec-head">Emergency Drugs</div>
             <p style="font-size:0.8rem;">Src: <a class="ref-link" href="https://wildtigerhealthproject.org/resources-category/anaesthetic-agents-and-associated-drugs/" target="_blank">WTHP</a> — Anaesthetic agents &amp; associated drugs, Anaesthetic emergencies. Tiger-specific field doses; confirm against label/patient before use.</p>
@@ -416,17 +381,80 @@
         </div>
     </div>
 
+    <div id="tab-settings" class="tab-content">
+        <div class="card">
+            <div class="sec-head">Add to Library</div>
+            <div class="form-group"><label>Drug Name</label><input type="text" id="new_drug_name" placeholder="e.g. Tiletamine"></div>
+            <div class="row">
+                <div class="col"><div class="form-group"><label>Def Dose (mg/kg)</label><input type="number" id="new_drug_dose" placeholder="0"></div></div>
+                <div class="col"><div class="form-group"><label>Def Conc (mg/ml)</label><input type="number" id="new_drug_conc" placeholder="0"></div></div>
+            </div>
+            <div class="form-group"><label>Category</label>
+                <select id="new_drug_category">
+                    <option value="Anaesthetic">Anaesthetic</option>
+                    <option value="Emergency">Emergency</option>
+                    <option value="Antibiotic">Antibiotic</option>
+                    <option value="Analgesic">Analgesic</option>
+                    <option value="Anti-parasitic">Anti-parasitic</option>
+                    <option value="Custom" selected>Custom</option>
+                </select>
+            </div>
+            <button class="btn btn-primary" onclick="saveDrugToRepo()">Save to Library</button>
+        </div>
+        
+        <div class="card">
+            <div class="sec-head">My Drug Library</div>
+            <div class="form-group"><input type="text" id="drugFilter" placeholder="🔍 Search your drug library" oninput="filterDrugRepo(this.value)"></div>
+            <div id="repoList"></div>
+        </div>
+
+        <div class="card" style="border-left-color: var(--blue);">
+            <div class="sec-head" style="color: var(--blue);">Data Backup</div>
+            <p style="font-size:0.8rem; color:#666;">Download a full backup of all history and custom drugs.</p>
+            <button class="btn btn-outline" onclick="downloadBackup()">📂 Download Full Backup</button>
+            <div style="margin-top:10px;">
+                <label class="btn btn-outline" style="border-style:dashed; display:block;">
+                    📥 Restore from Backup
+                    <input type="file" onchange="restoreBackup(this)" style="display:none;">
+                </label>
+            </div>
+        </div>
+
+        <div class="card" style="border-left-color: var(--green, #1b5e20);">
+            <div class="sec-head">Cloud Sync (Team Sharing)</div>
+            <p style="font-size:0.8rem; color:#666;">
+                Cases you save always stay on this device first — that never changes. If you sign in and have
+                network, they also sync to your team's shared database in the background, so other vets on the
+                team can see them too. No sign-in needed to keep using the app fully offline.
+            </p>
+            <div id="syncStatus" style="font-size:0.8rem; font-weight:700; margin:8px 0; padding:6px 10px; border-radius:6px; background:#f1f3f5;">Checking sync status…</div>
+            <div id="syncSignedOut">
+                <div class="form-group"><label>Team email</label><input type="email" id="sync_email" placeholder="you@team.org"></div>
+                <div class="form-group"><label>Password</label><input type="password" id="sync_password" placeholder="••••••••"></div>
+                <button class="btn btn-primary" onclick="CarnCalSync && CarnCalSync.signIn()">Sign In</button>
+                <p style="font-size:0.72rem; color:#999; margin-top:6px;">Accounts are created by your admin in the Firebase console — there's no self sign-up, to keep case data (including GPS) restricted to the team.</p>
+            </div>
+            <div id="syncSignedIn" style="display:none;">
+                <button class="btn btn-outline" onclick="CarnCalSync && CarnCalSync.signOutUser()">Sign Out</button>
+            </div>
+        </div>
+
+        <p id="appVersion" style="text-align:center; font-size:0.7rem; color:#bbb; margin-top:10px;"></p>
+    </div>
 
     <div id="tab-hist" class="tab-content">
-        <div class="card"><div class="sec-head">Saved Records</div><div id="historyList"></div></div>
+        <div class="card"><div class="sec-head">Saved Records</div>
+            <div class="form-group"><input type="text" id="histFilter" placeholder="🔍 Search by ID or species" oninput="filterHistory(this.value)"></div>
+            <div id="historyList"></div>
+        </div>
     </div>
 </div>
 
 <div class="footer-bar">
-    <button class="footer-btn fb-save" onclick="saveToHistory()"><span>💾</span> SAVE</button>
-    <button class="footer-btn fb-dl" onclick="exportCSV()"><span>⬇️</span> CSV</button>
-    <button class="footer-btn fb-pdf" onclick="printPDF()"><span>📄</span> PDF</button>
-    <button class="footer-btn fb-new" onclick="clearForm()"><span>🗑️</span></button>
+    <button class="footer-btn fb-save" onclick="saveToHistory()" aria-label="Save record to history"><span aria-hidden="true">💾</span> SAVE</button>
+    <button class="footer-btn fb-dl" onclick="exportCSV()" aria-label="Export record as CSV"><span aria-hidden="true">⬇️</span> CSV</button>
+    <button class="footer-btn fb-pdf" onclick="printPDF()" aria-label="Print or save record as PDF"><span aria-hidden="true">📄</span> PDF</button>
+    <button class="footer-btn fb-new" onclick="clearForm()" aria-label="Clear form and start a new record"><span aria-hidden="true">🗑️</span></button>
 </div>
 
 <div id="print-container"></div>

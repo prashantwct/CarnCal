@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v8';
 const CACHE_NAME = 'carncal-' + CACHE_VERSION;
 const ASSETS = [
   './',
@@ -7,6 +7,7 @@ const ASSETS = [
   './app.js',
   './sync.js',
   './firebase-config.js',
+  './assets/wct-logo.png',
   './icons/cc-72.png',
   './icons/cc-96.png',
   './icons/cc-144.png',
