@@ -256,7 +256,10 @@
         <div class="card">
             <div class="sec-head">Revival</div>
             <div class="row">
-                <div class="col"><div class="form-group"><label>Reversal Drug</label><input type="text" id="rev_drug" oninput="autoSave()"></div></div>
+                <div class="col"><div class="form-group"><label>Reversal Drug</label>
+                    <select id="rev_drug_picker" onchange="fillRevDrug(this)" style="margin-bottom:4px;"><option value="">Select Drug...</option></select>
+                    <input type="text" id="rev_drug" placeholder="Or type custom" oninput="autoSave()">
+                </div></div>
                 <div class="col"><div class="form-group"><label>Route</label><select id="rev_route" onchange="autoSave()"><option>IM</option><option>IV</option></select></div></div>
             </div>
             <div class="row">

@@ -145,13 +145,13 @@
 
     // --- DRUG REPOSITORY ---
     let drugRepo = [];
-    const DRUG_CATEGORIES = ['Anaesthetic', 'Emergency', 'Antibiotic', 'Analgesic', 'Anti-parasitic', 'Custom'];
+    const DRUG_CATEGORIES = ['Anaesthetic', 'Reversal', 'Emergency', 'Antibiotic', 'Analgesic', 'Anti-parasitic', 'Custom'];
     const defaultDrugs = [
         {name: "Ketamine", dose: 4.0, conc: 100, category: "Anaesthetic"},
         {name: "Xylazine", dose: 1.0, conc: 100, category: "Anaesthetic"},
         {name: "Medetomidine", dose: 0.05, conc: 1, category: "Anaesthetic"},
         {name: "Tiletamine-Zol", dose: 2.0, conc: 100, category: "Anaesthetic"},
-        {name: "Atipamezole", dose: 0.25, conc: 5, category: "Anaesthetic"}
+        {name: "Atipamezole", dose: 0.25, conc: 5, category: "Reversal"}
     ];
 
     // Emergency/resuscitation drugs, sourced from WTHP (tiger-specific field
@@ -231,6 +231,19 @@
         localStorage.setItem('carnivore_drugs_categories_migrated_v1', '1');
     }
 
+    // Follow-up correction for libraries migrated before "Reversal" existed
+    // as its own category — Atipamezole was folded into "Anaesthetic" at
+    // the time. Re-tags it without touching anything the vet edited.
+    function migrateReversalCategory() {
+        if (localStorage.getItem('carnivore_drugs_reversal_recat_v1')) return;
+        let changed = false;
+        drugRepo.forEach(d => {
+            if (d.name === 'Atipamezole' && d.category === 'Anaesthetic') { d.category = 'Reversal'; changed = true; }
+        });
+        if (changed) safeSetItem('carnivore_drugs', JSON.stringify(drugRepo));
+        localStorage.setItem('carnivore_drugs_reversal_recat_v1', '1');
+    }
+
     function loadDrugRepo() {
         const saved = safeParse('carnivore_drugs', null);
         if(saved) drugRepo = saved;
@@ -238,6 +251,7 @@
         mergeEmergencyDrugs();
         mergeFormularyDrugs();
         migrateDrugCategories();
+        migrateReversalCategory();
         renderRepoList();
     }
 
@@ -306,6 +320,7 @@
     }
 
     function renderRepoList() {
+        refreshRevDrugPicker();
         const div = document.getElementById('repoList');
         div.innerHTML = "";
         if(drugRepo.length === 0) { div.innerHTML = "No custom drugs."; return; }
@@ -374,6 +389,36 @@
         tr.querySelector('.c-dose').value = drug.dose;
         tr.querySelector('.c-conc').value = drug.conc;
         recalcAll();
+    }
+
+    // --- REVIVAL DRUG PICKER ---
+    // rev_drug_picker offers the current drug library (any category — a
+    // reversal doesn't have to be the built-in Atipamezole entry); picking
+    // one fills the free-text rev_drug field, which stays the field that's
+    // actually saved/exported so a vet can still type something not in the
+    // library. Refreshed from renderRepoList() whenever the library changes.
+    function refreshRevDrugPicker() {
+        const picker = document.getElementById('rev_drug_picker');
+        if (!picker) return;
+        picker.innerHTML = buildDrugOptionsHtml();
+    }
+    function fillRevDrug(selectEl) {
+        const idx = selectEl.value;
+        if (idx === "") return;
+        const drug = drugRepo[idx];
+        if (drug) { document.getElementById('rev_drug').value = drug.name; autoSave(); }
+    }
+
+    // --- TOP-UP DRUG PICKER ---
+    // Same pattern as the Calculator's drug rows: a grouped select fills a
+    // free-text field so top-ups can either be picked from the library or
+    // typed. tu-drug (not the picker) is the field that gets saved/exported.
+    function fillTopupDrug(selectEl) {
+        const idx = selectEl.value;
+        if (idx === "") return;
+        const drug = drugRepo[idx];
+        const tr = selectEl.closest('tr');
+        if (drug && tr) tr.querySelector('.tu-drug').value = drug.name;
     }
 
     // --- FUNCTIONAL IMPROVEMENT: DIVISION BY ZERO CHECK ---
@@ -446,7 +491,8 @@
     function addTopupRow(v=null) { 
         const t = v?v[0]:new Date().toTimeString().substr(0,5); 
         const sel = v?v[3]:'IV'; 
-        createRow('topupTable', `<td><input type="time" class="log-input" value="${escapeHtml(t)}"></td><td><input type="text" class="log-input" placeholder="Drug" value="${escapeHtml(v?v[1]:'')}"></td><td><input type="number" class="log-input" placeholder="mg" value="${escapeHtml(v?v[2]:'')}"></td><td><select class="log-input"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this dose">X</td>`); 
+        const opts = buildDrugOptionsHtml();
+        createRow('topupTable', `<td><input type="time" class="log-input tu-time" value="${escapeHtml(t)}"></td><td><select class="log-input tu-picker" onchange="fillTopupDrug(this)">${opts}</select><input type="text" class="log-input tu-drug" placeholder="Or type custom" value="${escapeHtml(v?v[1]:'')}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="log-input tu-mg" placeholder="mg" value="${escapeHtml(v?v[2]:'')}"></td><td><select class="log-input tu-route"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this dose">X</td>`); 
     }
 
     // Records are keyed by a unique recordId, never by animal ID — an
@@ -464,9 +510,12 @@
             rec.logs.push(d.slice(0, 5)); 
         });
         document.querySelectorAll('#topupTable tbody tr').forEach(r=>{ 
-            let d=[]; 
-            r.querySelectorAll('input, select').forEach(i=>d.push(i.value)); 
-            rec.topups.push(d.slice(0, 4)); 
+            rec.topups.push([
+                r.querySelector('.tu-time').value,
+                r.querySelector('.tu-drug').value,
+                r.querySelector('.tu-mg').value,
+                r.querySelector('.tu-route').value
+            ]);
         });
         let h = safeParse('carnivore_db', []);
         // Only offer to overwrite when it's the exact same in-progress case
@@ -525,9 +574,8 @@
             c+=l.slice(0, 5).map(csvEscape).join(',')+"\n"; 
         });
         c+="\nTOP-UP DOSES\nTime,Drug,mg,Route\n"; document.querySelectorAll('#topupTable tbody tr').forEach(r=>{ 
-            let l=[]; 
-            r.querySelectorAll('input, select').forEach(i=>l.push(i.value)); 
-            c+=l.slice(0, 4).map(csvEscape).join(',')+"\n"; 
+            const l = [r.querySelector('.tu-time').value, r.querySelector('.tu-drug').value, r.querySelector('.tu-mg').value, r.querySelector('.tu-route').value];
+            c+=l.map(csvEscape).join(',')+"\n"; 
         });
         const b = new Blob([c],{type:'text/csv'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=(document.getElementById('animal_id').value||"data")+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
@@ -610,9 +658,8 @@
         <div class="p-section"><div class="p-sec-title">II. Vitals & Timeline</div><div class="p-grid"><div class="p-row"><span class="p-label">Wt (Act):</span> <span class="p-val">${val('weight_act')}</span></div><div class="p-row"><span class="p-label">Wt (Est):</span> <span class="p-val">${val('weight_est')}</span></div></div><div class="p-grid"><div class="p-row"><span class="p-label">Darted:</span> <span class="p-val">${val('time_dart')}</span></div><div class="p-row"><span class="p-label">Down:</span> <span class="p-val">${val('time_down')}</span></div></div></div>
         <div class="p-section"><div class="p-sec-title">III. Drugs Used</div><table class="p-table"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th></tr></thead><tbody>`;
         document.querySelectorAll('#topupTable tbody tr').forEach(r=>{ 
-            let d=[]; 
-            r.querySelectorAll('input, select').forEach(i=>d.push(escapeHtml(i.value))); 
-            if(d[1]) html+=`<tr><td>${d[0]}</td><td>${d[1]}</td><td>${d[2]}</td><td>${d[3]}</td></tr>`; 
+            const drugName = escapeHtml(r.querySelector('.tu-drug').value);
+            if(drugName) html+=`<tr><td>${escapeHtml(r.querySelector('.tu-time').value)}</td><td>${drugName}</td><td>${escapeHtml(r.querySelector('.tu-mg').value)}</td><td>${escapeHtml(r.querySelector('.tu-route').value)}</td></tr>`; 
         });
         html+=`</tbody></table></div>
         <div class="p-section"><div class="p-sec-title">IV. Monitoring Log</div><table class="p-table"><thead><tr><th>Time</th><th>HR</th><th>RR</th><th>SpO2</th><th>Notes</th></tr></thead><tbody>`;
@@ -622,7 +669,18 @@
             if(d[0]) html+=`<tr><td>${d[0]}</td><td>${d[1]}</td><td>${d[2]}</td><td>${d[3]}</td><td>${d[4]}</td></tr>`; 
         });
         html+=`</tbody></table></div>
-        <div class="p-section"><div class="p-sec-title">V. Morphometry</div><div class="p-grid"><div class="p-row"><span class="p-label">Total Len:</span> <span class="p-val">${val('m_total_len')}</span></div><div class="p-row"><span class="p-label">Shoulder:</span> <span class="p-val">${val('m_shoulder')}</span></div></div><div class="p-grid"><div class="p-row"><span class="p-label">Chest:</span> <span class="p-val">${val('m_chest')}</span></div><div class="p-row"><span class="p-label">Neck:</span> <span class="p-val">${val('m_neck')}</span></div></div></div>`;
+        <div class="p-section"><div class="p-sec-title">V. Revival &amp; Release</div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Reversal Drug:</span> <span class="p-val">${val('rev_drug')}</span></div><div class="p-row"><span class="p-label">Route:</span> <span class="p-val">${val('rev_route')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Given At:</span> <span class="p-val">${val('time_rev')}</span></div><div class="p-row"><span class="p-label">Head Up:</span> <span class="p-val">${val('time_headup')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Standing:</span> <span class="p-val">${val('time_standing')}</span></div><div class="p-row"><span class="p-label">Release Site:</span> <span class="p-val">${val('rel_notes')}</span></div></div>
+        </div>
+        <div class="p-section"><div class="p-sec-title">VI. Morphometry (cm)</div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Total Len:</span> <span class="p-val">${val('m_total_len')}</span></div><div class="p-row"><span class="p-label">Shoulder:</span> <span class="p-val">${val('m_shoulder')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Chest:</span> <span class="p-val">${val('m_chest')}</span></div><div class="p-row"><span class="p-label">Neck:</span> <span class="p-val">${val('m_neck')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Head Circ:</span> <span class="p-val">${val('m_head_circ')}</span></div><div class="p-row"><span class="p-label">Paw W (Fore/Hind):</span> <span class="p-val">${val('m_paw_fore')} / ${val('m_paw_hind')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Paw L (Fore/Hind):</span> <span class="p-val">${val('m_paw_fore_len')} / ${val('m_paw_hind_len')}</span></div><div class="p-row"><span class="p-label">Canine Upper (L/R):</span> <span class="p-val">${val('m_canine_ul')} / ${val('m_canine_ur')}</span></div></div>
+        <div class="p-grid"><div class="p-row"><span class="p-label">Canine Lower (L/R):</span> <span class="p-val">${val('m_canine_ll')} / ${val('m_canine_lr')}</span></div><div class="p-row"><span class="p-label">Inter-Canine Dist (Up/Low):</span> <span class="p-val">${val('m_icd_up')} / ${val('m_icd_low')}</span></div></div>
+        </div>`;
         c.innerHTML = html; window.print();
     }
 
