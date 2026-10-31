@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#1b5e20">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="description" content="Offline-first anaesthesia monitoring and drug-dose calculator for wild carnivore immobilization records.">
@@ -26,6 +27,7 @@
         }
         
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
         
         body { 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
@@ -111,11 +113,26 @@
             a.ref-link { color: var(--blue); text-decoration: none; font-weight: bold; }
 
             .footer-bar { position: fixed; bottom: 0; left: 0; right: 0; background: white; padding: 12px; box-shadow: 0 -4px 20px rgba(0,0,0,0.1); display: flex; gap: 10px; z-index: 1000; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
-            .footer-btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 0.8rem; font-weight: 700; display: flex; flexDirection: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
+            .footer-btn { flex: 1; padding: 12px; border-radius: 8px; border: none; font-size: 0.8rem; font-weight: 700; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; cursor: pointer; }
             .fb-save { background: var(--primary); color: white; }
             .fb-dl { background: var(--blue); color: white; }
             .fb-pdf { background: #333; color: white; }
             .fb-new { background: #ffebee; color: var(--danger); max-width: 80px; }
+
+            /* ---- UI/UX additions ---- */
+            .sec-head { font-size: 0.8rem; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--primary); margin: 0 0 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+            button { font-family: inherit; }
+            .tab { cursor: pointer; font-family: inherit; }
+            :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
+            select:not(.log-input) { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9' viewBox='0 0 14 9'%3E%3Cpath d='M1 1l6 6 6-6' fill='none' stroke='%23555' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+            .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            .row-del { min-width: 44px; min-height: 44px; border: none; background: transparent; color: var(--danger); font-size: 1.1rem; font-weight: 700; cursor: pointer; border-radius: 8px; }
+            .row-del:active { background: #ffebee; }
+            .btn-sm { min-height: 40px; min-width: 40px; }
+            .help-btn { width: 28px; height: 28px; line-height: 28px; }
+            .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); background: #263238; color: #fff; padding: 12px 18px; border-radius: 10px; font-size: 0.9rem; font-weight: 600; opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 2000; max-width: 90vw; text-align: center; box-shadow: 0 6px 20px rgba(0,0,0,0.25); }
+            .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+            @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }
 
             #print-container { display: none; }
             @keyframes fadeIn { from { opacity:0; transform: translateY(5px); } to { opacity:1; transform: translateY(0); } }
@@ -124,7 +141,7 @@
         /* PRINT STYLES - Generates the PDF Datasheet (Updated with page-break-inside: avoid for tables) */
         @media print {
             body { background: white; color: black; font-size: 11pt; }
-            header, .footer-bar, .container, .tabs-wrapper { display: none !important; }
+            header, .footer-bar, .container, .tabs-wrapper, .toast { display: none !important; }
             #print-container { display: block !important; width: 100%; margin: 0; padding: 20px; }
             .p-header { text-align: center; border-bottom: 2px solid black; margin-bottom: 20px; padding-bottom: 10px; }
             .p-header h1 { margin: 0; font-size: 22pt; text-transform: uppercase; }
@@ -152,7 +169,7 @@
     <div class="header-title">
         <h1>Anaesthesia Monitoring Sheet</h1>
         <div class="subtitle">Offline Datasheet <span id="netStatus" class="net-badge"></span> <span id="weightBadge" class="net-badge online" style="display:none;">⚖ <span id="weightBadgeVal">0</span> kg</span></div>
-        <div id="saveStatus" style="font-size:0.7rem; margin-top:5px; opacity:0.8; display:none;">Auto-saved...</div>
+        <div id="saveStatus" role="status" aria-live="polite" style="font-size:0.75rem; margin-top:5px; font-weight:600; display:none;">&#9679; Unsaved changes &mdash; tap SAVE</div>
     </div>
     
     <div class="timer-widget" id="anaesthesia_timer">
@@ -166,14 +183,14 @@
 </header>
 
 <div class="container">
-    <div class="tabs-wrapper">
-        <div class="tab active" onclick="switchTab('tab-case')">Case</div>
-        <div class="tab" onclick="switchTab('tab-calc')">Calculator</div>
-        <div class="tab" onclick="switchTab('tab-monitor')">Monitoring</div>
-        <div class="tab" onclick="switchTab('tab-morph')">Morphometry</div>
-        <div class="tab" onclick="switchTab('tab-ref')">Reference</div>
-        <div class="tab" onclick="switchTab('tab-settings')">My Drugs</div>
-        <div class="tab" onclick="switchTab('tab-hist')">History</div>
+    <div class="tabs-wrapper" role="tablist" aria-label="Record sections">
+        <button type="button" class="tab active" role="tab" aria-selected="true" onclick="switchTab('tab-case')">Case</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-calc')">Calculator</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-monitor')">Monitoring</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-morph')">Morphometry</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-ref')">Reference</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-settings')">My Drugs</button>
+        <button type="button" class="tab" role="tab" aria-selected="false" onclick="switchTab('tab-hist')">History</button>
     </div>
 
     <div id="tab-case" class="tab-content active">
@@ -219,7 +236,7 @@
             <div class="sec-head">Multi-Drug Calculator</div>
             <div class="form-group"><label>Animal Weight (kg)</label><input type="number" id="calc_weight" placeholder="Enter Weight" oninput="recalcAll(); updateWeightBadge();" style="font-size:1.2rem; padding:15px;"></div>
             <p style="font-size:0.8rem; color:#666;">Select from "My Drugs" or type manually.</p>
-            <table class="calc-table" id="calcTable"><thead><tr><th>Drug</th><th>mg/kg</th><th>mg/ml</th><th>Vol</th><th></th></tr></thead><tbody></tbody></table>
+            <div class="table-scroll"><table class="calc-table" id="calcTable"><thead><tr><th>Drug</th><th>mg/kg</th><th>mg/ml</th><th>Vol</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
             <button class="btn btn-add" onclick="addDrugRow()">+ Add Drug Row</button>
             <div id="resultBox" style="background:var(--primary); color:white; padding:20px; border-radius:8px; text-align:center; margin-top:20px; display:none;">
                 <div style="font-size:0.8rem; opacity:0.8;">TOTAL VOLUME</div><div style="font-size:2rem; font-weight:bold;"><span id="total_vol_display">0.00</span> ml</div>
@@ -229,7 +246,7 @@
 
         <div class="card card-warn">
             <div class="sec-head" style="color: var(--warn-text);">Top-Up / Used Doses</div>
-            <table id="topupTable"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th><th></th></tr></thead><tbody></tbody></table>
+            <div class="table-scroll"><table id="topupTable"><thead><tr><th>Time</th><th>Drug</th><th>mg</th><th>Route</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
             <button class="btn btn-add" style="border-color: #f57f17; color: #f57f17;" onclick="addTopupRow()">+ Add Top-Up</button>
         </div>
     </div>
@@ -249,7 +266,7 @@
 
         <div class="card">
             <div class="sec-head">Monitoring Log</div>
-            <div style="overflow-x:auto;"><table id="logTable"><thead><tr><th>Time</th><th>HR</th><th>RR</th><th>SpO2</th><th>Note</th><th></th></tr></thead><tbody></tbody></table></div>
+            <div style="overflow-x:auto;"><table id="logTable"><thead><tr><th>Time</th><th>HR</th><th>RR</th><th>SpO2</th><th>Note</th><th><span class="sr-only">Remove</span></th></tr></thead><tbody></tbody></table></div>
             <button class="btn btn-add" onclick="addLogStep()">+ Add Reading</button>
         </div>
         
@@ -418,7 +435,7 @@
             <div style="margin-top:10px;">
                 <label class="btn btn-outline" style="border-style:dashed; display:block;">
                     📥 Restore from Backup
-                    <input type="file" onchange="restoreBackup(this)" style="display:none;">
+                    <input type="file" accept=".json,application/json" onchange="restoreBackup(this)" style="display:none;">
                 </label>
             </div>
         </div>
@@ -435,14 +452,14 @@
                 <div class="form-group"><label>Team email</label><input type="email" id="sync_email" placeholder="you@team.org"></div>
                 <div class="form-group"><label>Password</label><input type="password" id="sync_password" placeholder="••••••••"></div>
                 <button class="btn btn-primary" onclick="CarnCalSync && CarnCalSync.signIn()">Sign In</button>
-                <p style="font-size:0.72rem; color:#999; margin-top:6px;">Accounts are created by your admin in the Firebase console — there's no self sign-up, to keep case data (including GPS) restricted to the team.</p>
+                <p style="font-size:0.72rem; color:#6b7280; margin-top:6px;">Accounts are created by your admin in the Firebase console — there's no self sign-up, to keep case data (including GPS) restricted to the team.</p>
             </div>
             <div id="syncSignedIn" style="display:none;">
                 <button class="btn btn-outline" onclick="CarnCalSync && CarnCalSync.signOutUser()">Sign Out</button>
             </div>
         </div>
 
-        <p id="appVersion" style="text-align:center; font-size:0.7rem; color:#bbb; margin-top:10px;"></p>
+        <p id="appVersion" style="text-align:center; font-size:0.7rem; color:#6b7280; margin-top:10px;"></p>
     </div>
 
     <div id="tab-hist" class="tab-content">
@@ -460,6 +477,7 @@
     <button class="footer-btn fb-new" onclick="clearForm()" aria-label="Clear form and start a new record"><span aria-hidden="true">🗑️</span></button>
 </div>
 
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <div id="print-container"></div>
 
 <script src="./app.js"></script>

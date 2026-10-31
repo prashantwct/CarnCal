@@ -1,7 +1,7 @@
 // app.js
 
     // --- CONFIG ---
-    const APP_VERSION = '1.1.0';
+    const APP_VERSION = '1.2.0';
     const CONFIG = {
         STORAGE_WARN_MB: 4.0,
         ANAESTHESIA_WARNING_MIN: 35,
@@ -51,11 +51,25 @@
         document.querySelectorAll('.tab, .tab-content').forEach(e=>e.classList.remove('active'));
         document.getElementById(t).classList.add('active');
         const map={'tab-case':0,'tab-calc':1,'tab-monitor':2,'tab-morph':3,'tab-ref':4,'tab-settings':5,'tab-hist':6};
-        document.querySelectorAll('.tab')[map[t]].classList.add('active');
+        const activeTab = document.querySelectorAll('.tab')[map[t]];
+        activeTab.classList.add('active');
+        document.querySelectorAll('.tab').forEach(b => b.setAttribute('aria-selected', b === activeTab ? 'true' : 'false'));
+        // Keep the selected tab visible in the horizontally-scrolling tab strip
+        const strip = activeTab.parentElement;
+        strip.scrollTo({ left: activeTab.offsetLeft - (strip.clientWidth - activeTab.offsetWidth) / 2, behavior: 'smooth' });
         window.scrollTo(0,0);
     }
     function toggleHelp(id) { document.getElementById(id).classList.toggle('active'); }
-    function autoSave() { const s = document.getElementById('saveStatus'); s.style.display='block'; setTimeout(()=>s.style.display='none', 2000); }
+    // Honest dirty-state indicator: data is only persisted by SAVE, so show
+    // "Unsaved changes" until it is saved/cleared instead of a false "Auto-saved".
+    function setUnsaved(on) { const s = document.getElementById('saveStatus'); if (s) s.style.display = on ? 'block' : 'none'; }
+    function autoSave() { setUnsaved(true); }
+    let toastTimer = null;
+    function toast(msg) {
+        const t = document.getElementById('toast'); if (!t) return;
+        t.textContent = msg; t.classList.add('show');
+        clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+    }
 
     // --- HEADER WEIGHT BADGE ---
     // The Calculator weight now lives on its own tab, away from Case/
@@ -269,7 +283,7 @@
         document.getElementById('new_drug_dose').value='';
         document.getElementById('new_drug_conc').value='';
         document.getElementById('new_drug_category').value='Custom';
-        alert("Drug Added");
+        toast("Drug added to library");
     }
 
     function deleteDrugFromRepo(i) {
@@ -343,7 +357,7 @@
                     `<td><input type="number" step="any" class="log-input edit-conc" value="${escapeHtml(d.conc)}"></td>` +
                     `<td style="white-space:nowrap;">` +
                     `<button class="btn-sm" aria-label="Save changes to ${escapeHtml(d.name)}" style="color:var(--primary);border:none;" onclick="saveEditDrug(${i})">✓</button>` +
-                    `<button class="btn-sm" aria-label="Cancel editing" style="color:#888;border:none;" onclick="cancelEditDrug()">✕</button>` +
+                    `<button class="btn-sm" aria-label="Cancel editing" style="color:#6b7280;border:none;" onclick="cancelEditDrug()">✕</button>` +
                     `</td>`;
             } else {
                 tr.innerHTML = `<td>${escapeHtml(d.name)}<br><span class="cat-chip">${escapeHtml(cat)}</span></td><td>${escapeHtml(d.dose)}</td><td>${escapeHtml(d.conc)}</td>` +
@@ -362,7 +376,7 @@
     function addDrugRow(name="", dose="", conc="") {
         const id = 'r'+Date.now();
         const opts = buildDrugOptionsHtml();
-        createRow('calcTable', `<td id="${id}"><select class="log-input" style="text-align:left; font-weight:bold; color:var(--primary);" onchange="fillDrugRow(this)">${opts}</select><input type="text" class="log-input calc-name-custom" placeholder="Or type custom" value="${escapeHtml(name)}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="c-dose log-input" value="${escapeHtml(dose)}" oninput="recalcAll()"></td><td><input type="number" class="c-conc log-input" value="${escapeHtml(conc)}" oninput="recalcAll()"></td><td class="c-vol" style="font-weight:bold; color:var(--primary); text-align:center;">0.0</td><td onclick="document.getElementById('${id}').parentElement.remove(); recalcAll();" style="color:red; font-weight:bold; cursor:pointer;">X</td>`);
+        createRow('calcTable', `<td id="${id}"><select class="log-input" style="text-align:left; font-weight:bold; color:var(--primary);" onchange="fillDrugRow(this)">${opts}</select><input type="text" class="log-input calc-name-custom" placeholder="Or type custom" value="${escapeHtml(name)}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="c-dose log-input" value="${escapeHtml(dose)}" oninput="recalcAll()"></td><td><input type="number" class="c-conc log-input" value="${escapeHtml(conc)}" oninput="recalcAll()"></td><td class="c-vol" style="font-weight:bold; color:var(--primary); text-align:center;">0.0</td><td><button type="button" class="row-del" aria-label="Remove this drug row" onclick="this.closest('tr').remove(); recalcAll();">\u2715</button></td>`);
     }
 
     // Groups the drug picker by category (Anaesthetic/Emergency/Antibiotic/
@@ -451,7 +465,7 @@
             const conc = parseFloat(r.querySelector('.c-conc').value);
             if (name && vol > 0 && conc > 0) addTopupRow([now, name, (vol*conc).toFixed(1), 'IM']);
         });
-        alert("Doses copied.");
+        toast("Doses copied to Used Doses");
     }
 
     // --- UTILS ---
@@ -484,7 +498,7 @@
     // --- FUNCTIONAL IMPROVEMENT: LOG DELETION ---
     function addLogStep(v=null) { 
         const t = v?v[0]:new Date().toTimeString().substr(0,5); 
-        createRow('logTable', `<td><input type="time" class="log-input" value="${escapeHtml(t)}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[1]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[2]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[3]:'')}"></td><td><input type="text" class="log-input" value="${escapeHtml(v?v[4]:'')}"></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this reading">X</td>`); 
+        createRow('logTable', `<td><input type="time" class="log-input" value="${escapeHtml(t)}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[1]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[2]:'')}"></td><td><input type="number" class="log-input" value="${escapeHtml(v?v[3]:'')}"></td><td><input type="text" class="log-input" value="${escapeHtml(v?v[4]:'')}"></td><td><button type="button" class="row-del" aria-label="Remove this reading" onclick="this.closest('tr').remove(); autoSave();">\u2715</button></td>`); 
     }
     
     // --- FUNCTIONAL IMPROVEMENT: TOPUP DELETION ---
@@ -492,7 +506,7 @@
         const t = v?v[0]:new Date().toTimeString().substr(0,5); 
         const sel = v?v[3]:'IV'; 
         const opts = buildDrugOptionsHtml();
-        createRow('topupTable', `<td><input type="time" class="log-input tu-time" value="${escapeHtml(t)}"></td><td><select class="log-input tu-picker" onchange="fillTopupDrug(this)">${opts}</select><input type="text" class="log-input tu-drug" placeholder="Or type custom" value="${escapeHtml(v?v[1]:'')}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="log-input tu-mg" placeholder="mg" value="${escapeHtml(v?v[2]:'')}"></td><td><select class="log-input tu-route"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td onclick="this.parentElement.remove()" style="color:red; font-weight:bold; cursor:pointer;" role="button" aria-label="Remove this dose">X</td>`); 
+        createRow('topupTable', `<td><input type="time" class="log-input tu-time" value="${escapeHtml(t)}"></td><td><select class="log-input tu-picker" onchange="fillTopupDrug(this)">${opts}</select><input type="text" class="log-input tu-drug" placeholder="Or type custom" value="${escapeHtml(v?v[1]:'')}" style="font-size:0.8rem; margin-top:2px;"></td><td><input type="number" class="log-input tu-mg" placeholder="mg" value="${escapeHtml(v?v[2]:'')}"></td><td><select class="log-input tu-route"><option ${sel=='IV'?'selected':''}>IV</option><option ${sel=='IM'?'selected':''}>IM</option></select></td><td><button type="button" class="row-del" aria-label="Remove this dose" onclick="this.closest('tr').remove(); autoSave();">\u2715</button></td>`); 
     }
 
     // Records are keyed by a unique recordId, never by animal ID — an
@@ -532,7 +546,7 @@
             h.unshift(rec);
         }
         if (!safeSetItem('carnivore_db', JSON.stringify(h))) return;
-        alert("Saved to History!"); renderHistory();
+        setUnsaved(false); toast("Saved to history \u2713"); renderHistory();
         // Cloud Sync (optional, never blocks the local save above). See
         // sync.js — this is a no-op until Cloud Sync is configured and
         // the user is signed in.
@@ -545,17 +559,17 @@
 
     function renderHistory() {
         const l = document.getElementById('historyList'); l.innerHTML=""; const h = safeParse('carnivore_db', []);
-        if(h.length===0) { l.innerHTML="<div style='text-align:center; padding:20px; color:#aaa;'>No records</div>"; return; }
+        if(h.length===0) { l.innerHTML="<div style='text-align:center; padding:20px; color:#6b7280;'>No records yet \u2014 saved cases will appear here</div>"; return; }
         let shown = 0;
         h.forEach((r,i)=>{
             if (histFilterQuery && !(String(r.id||'').toLowerCase().includes(histFilterQuery) || String(r.species||'').toLowerCase().includes(histFilterQuery))) return;
             shown++;
             const d=document.createElement('div');
             d.style.cssText="padding:15px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;";
-            d.innerHTML = `<div><strong>${escapeHtml(r.id)}</strong> <span style="font-size:0.8rem; background:#eee; padding:2px 6px; border-radius:4px;">${escapeHtml(r.species)}</span><br><small style="color:#888">${escapeHtml(r.date)}</small></div><div><button class="btn-outline" aria-label="Load record for ${escapeHtml(r.id)}" style="display:inline; width:auto; padding:5px 10px; margin-right:5px;" onclick="loadRec(${i})">Load</button><button class="btn-sm" aria-label="Delete record for ${escapeHtml(r.id)}" style="color:red; border:none; background:#ffebee;" onclick="delRec(${i})">X</button></div>`;
+            d.innerHTML = `<div><strong>${escapeHtml(r.id)}</strong> <span style="font-size:0.8rem; background:#eee; padding:2px 6px; border-radius:4px;">${escapeHtml(r.species)}</span><br><small style="color:#6b7280">${escapeHtml(r.date)}</small></div><div><button class="btn-outline" aria-label="Load record for ${escapeHtml(r.id)}" style="display:inline; width:auto; padding:5px 10px; margin-right:5px;" onclick="loadRec(${i})">Load</button><button class="btn-sm" aria-label="Delete record for ${escapeHtml(r.id)}" style="color:red; border:none; background:#ffebee;" onclick="delRec(${i})">X</button></div>`;
             l.appendChild(d);
         });
-        if (shown === 0) l.innerHTML = "<div style='text-align:center; padding:20px; color:#aaa;'>No matching records</div>";
+        if (shown === 0) l.innerHTML = "<div style='text-align:center; padding:20px; color:#6b7280;'>No matching records</div>";
     }
     
     function loadRec(i) {
@@ -579,7 +593,7 @@
         });
         const b = new Blob([c],{type:'text/csv'}); const a = document.createElement('a'); a.href=URL.createObjectURL(b); a.download=(document.getElementById('animal_id').value||"data")+".csv"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }
-    function clearForm() { if(confirm("Clear Form?")) { document.querySelectorAll('input').forEach(i=>i.value=""); document.querySelector('#logTable tbody').innerHTML=""; document.querySelector('#topupTable tbody').innerHTML=""; document.getElementById('date').valueAsDate = new Date(); addLogStep(); document.querySelector('#calcTable tbody').innerHTML=""; addDrugRow(); updateWeightBadge(); } }
+    function clearForm() { if(confirm("Clear Form?")) { document.querySelectorAll('input').forEach(i=>i.value=""); document.querySelector('#logTable tbody').innerHTML=""; document.querySelector('#topupTable tbody').innerHTML=""; document.getElementById('date').valueAsDate = new Date(); addLogStep(); document.querySelector('#calcTable tbody').innerHTML=""; addDrugRow(); updateWeightBadge(); setUnsaved(false); toast('Form cleared'); } }
     
     function val(id) { const el = document.getElementById(id); return escapeHtml(el ? el.value : ''); }
 
@@ -732,3 +746,11 @@
     requestWakeLock();
     updateWeightBadge();
     document.getElementById('appVersion').textContent = 'CarnCal v' + APP_VERSION;
+
+    // Associate visible labels with their controls (screen-reader names + bigger tap area).
+    // Labels that contain a "?" help button are skipped so tapping "?" never focuses the input.
+    document.querySelectorAll('.form-group > label, .col > label').forEach(l => {
+        if (l.htmlFor || l.querySelector('.help-btn')) return;
+        const n = l.nextElementSibling;
+        if (n && n.id && /^(INPUT|SELECT|TEXTAREA)$/.test(n.tagName)) l.htmlFor = n.id;
+    });
